@@ -144,7 +144,7 @@
     const tableArea = document.getElementById('tableArea');
 
     async function loadConfig() {
-      const [configRes, dataRes] = await Promise.all([fetch('/api/config'), fetch('/api/data')]);
+      const [configRes, dataRes] = await Promise.all([fetch('report-config.json'), fetch('data.json')]);
       configData = await configRes.json();
       reportData = await dataRes.json();
       renderTree();
