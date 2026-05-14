@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>报表配置后台</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; color: #333; }
+    header { background: #2c3e50; color: #fff; padding: 18px 24px; }
+    header h1 { margin: 0; font-size: 20px; }
+    .layout { display: flex; height: calc(100vh - 70px); }
+    .sidebar { width: 320px; border-right: 1px solid #ddd; padding: 16px; overflow-y: auto; background: #fafafa; }
+    .panel { flex: 1; display: flex; flex-direction: column; padding: 16px; overflow-y: auto; }
+    .section { margin-bottom: 24px; }
+    .box { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    .group-title { font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+    .report-item { padding: 8px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 4px; }
+    .report-item:hover { background: #eef7ff; }
+    .report-item.active { background: #d3eaff; }
+    label { display: block; margin: 12px 0 6px; font-weight: 600; }
+    input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    textarea { min-height: 80px; resize: vertical; }
+    .button-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    button { padding: 10px 16px; border: none; border-radius: 4px; background: #3498db; color: #fff; cursor: pointer; }
+    button.danger { background: #e74c3c; }
+    button.small { padding: 8px 12px; font-size: 13px; }
+    .status { margin-top: 10px; min-height: 20px; }
+    .inline-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    .inline-row input { flex: 1; }
+    .panel-row { display: grid; grid-template-columns: 1.4fr 1.3fr 1fr 1fr auto auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .panel-row select { width: 100%; }
+    .panel-row input { width: 100%; }
+    .panel-row button { min-width: 48px; }
+  </style>
+</head>
+<body>
+  <header><h1>轻量报表配置后台</h1></header>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="box">
+        <div class="group-title">报表类型与列表</div>
+        <div id="groupTree"></div>
+      </div>
+      <div class="box">
+        <div class="group-title">新增分组</div>
+        <div class="inline-row">
+          <input id="newGroupName" placeholder="分组名称，例如：实时监控" />
+          <button class="small" id="addGroupBtn">新增</button>
+        </div>
+      </div>
+      <div class="box">
+        <button id="newReportBtn">新增报表</button>
+        <button id="saveConfigBtn">发布配置</button>
+        <button id="exportConfigBtn">导出配置</button>
+        <button id="importConfigBtn">导入配置</button>
+        <input type="file" id="configFileInput" accept="application/json" style="display:none" />
+      </div>
+      <div class="box">
+        <div class="group-title">可选字段</div>
+        <div id="fieldList"></div>
+      </div>
+      <div class="box">
+        <div class="group-title">说明</div>
+        <p>通过左侧选择报表，右侧编辑报表详情。保存后可在 <code>/dashboard.html</code> 查看效果。</p>
+        <p>点击字段按钮可快速添加到维度、指标或表格列；面板可单独选择指标和图表类型。</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="box">
+        <div class="group-title">报表详情</div>
+        <label for="reportId">报表 ID</label>
+        <input id="reportId" readonly />
+        <label for="reportName">报表名称</label>
+        <input id="reportName" />
+        <label for="reportGroup">所属分组</label>
+        <select id="reportGroup"></select>
+        <label for="reportDesc">报表描述</label>
+        <textarea id="reportDesc"></textarea>
+        <label for="reportDimensions">维度（逗号分隔）</label>
+        <input id="reportDimensions" placeholder="城市,业务线,时间" />
+        <label for="reportMetrics">指标（逗号分隔）</label>
+        <input id="reportMetrics" placeholder="支付单量,接起单量,成交单量" />
+        <label for="reportDashboardMetrics">仪表盘指标（逗号分隔，留空则不显示仪表盘）</label>
+        <input id="reportDashboardMetrics" placeholder="支付单量,接单率" />
+        <label for="reportRefresh">刷新规则</label>
+        <select id="reportRefresh">
+          <option value="15min">15分钟</option>
+          <option value="daily">每日</option>
+        </select>
+        <label>面板列表</label>
+        <div id="panelList"></div>
+        <button class="small" id="addPanelRowBtn">新增面板</button>
+        <label>表格列配置</label>
+        <div id="tableColumnsBuilder" style="border:1px solid #e0e0e0;border-radius:4px;padding:8px;min-height:36px;background:#fafafa;"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="small" id="addColBtn">+ 添加列</button>
+          <button class="small" id="addColGroupBtn">+ 添加分组</button>
+        </div>
+        <label for="reportTableMode">表格呈现方式</label>
+        <select id="reportTableMode">
+          <option value="standard">标准模式（每行一条数据）</option>
+          <option value="vertical">指标纵列（每行一个指标）</option>
+        </select>
+        <div id="comparisonsSection" style="display:none; margin-top:10px; padding:10px; background:#f5f5f5; border-radius:4px;">
+          <label style="margin:0 0 8px; display:block;">对比列</label>
+          <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <label style="font-weight:normal; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="cmpDow" value="dow"> 环比（昨日同时段）</label>
+            <label style="font-weight:normal; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="cmpWow" value="wow"> 周同比（上周同期）</label>
+            <label style="font-weight:normal; display:flex; align-items:center; gap:4px;"><input type="checkbox" id="cmpYoy" value="yoy"> 年同比（去年同期）</label>
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="saveReportBtn">保存报表</button>
+          <button class="danger" id="deleteReportBtn">删除报表</button>
+        </div>
+        <div class="status" id="adminStatus"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const groupTree = document.getElementById('groupTree');
+    const reportGroupSelect = document.getElementById('reportGroup');
+    const newGroupName = document.getElementById('newGroupName');
+    const addGroupBtn = document.getElementById('addGroupBtn');
+    const newReportBtn = document.getElementById('newReportBtn');
+    const saveConfigBtn = document.getElementById('saveConfigBtn');
+    const exportConfigBtn = document.getElementById('exportConfigBtn');
+    const importConfigBtn = document.getElementById('importConfigBtn');
+    const configFileInput = document.getElementById('configFileInput');
+    const saveReportBtn = document.getElementById('saveReportBtn');
+    const deleteReportBtn = document.getElementById('deleteReportBtn');
+    const adminStatus = document.getElementById('adminStatus');
+
+    const reportIdInput = document.getElementById('reportId');
+    const reportNameInput = document.getElementById('reportName');
+    const reportDescInput = document.getElementById('reportDesc');
+    const reportDimensionsInput = document.getElementById('reportDimensions');
+    const reportMetricsInput = document.getElementById('reportMetrics');
+    const reportDashboardMetricsInput = document.getElementById('reportDashboardMetrics');
+    const reportRefreshSelect = document.getElementById('reportRefresh');
+    const reportTableColumnsInput = { value: '' }; // 保留以避免 clearForm 报错，实际用 builder
+    const reportTableModeSelect = document.getElementById('reportTableMode');
+    const comparisonsSection = document.getElementById('comparisonsSection');
+    const cmpDow = document.getElementById('cmpDow');
+    const cmpWow = document.getElementById('cmpWow');
+    const cmpYoy = document.getElementById('cmpYoy');
+    const tableColumnsBuilder = document.getElementById('tableColumnsBuilder');
+    const panelList = document.getElementById('panelList');
+    const addPanelRowBtn = document.getElementById('addPanelRowBtn');
+    const fieldList = document.getElementById('fieldList');
+
+    let configData = null;
+    let currentReportId = null;
+    let reportData = [];
+    let availableFields = [];
+
+    reportTableModeSelect.addEventListener('change', () => {
+      comparisonsSection.style.display = reportTableModeSelect.value === 'vertical' ? '' : 'none';
+    });
+
+    // ── 表格列构建器 ──────────────────────────────────────
+    const colItemStyle = 'display:flex;align-items:center;gap:6px;margin-bottom:4px;';
+    const colInputStyle = 'flex:1;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;';
+    const smallBtnStyle = 'padding:3px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#333;cursor:pointer;font-size:12px;white-space:nowrap;';
+
+    function moveDomEl(el, dir) {
+      const p = el.parentElement;
+      if (dir === 'up' && el.previousElementSibling) p.insertBefore(el, el.previousElementSibling);
+      else if (dir === 'down' && el.nextElementSibling) p.insertBefore(el.nextElementSibling, el);
+    }
+
+    function makeMoveBtns(el) {
+      const up = document.createElement('button'); up.textContent = '↑'; up.style.cssText = smallBtnStyle; up.onclick = () => moveDomEl(el, 'up');
+      const dn = document.createElement('button'); dn.textContent = '↓'; dn.style.cssText = smallBtnStyle; dn.onclick = () => moveDomEl(el, 'down');
+      return [up, dn];
+    }
+
+    function makeSubColRow(value = '') {
+      const row = document.createElement('div');
+      row.dataset.type = 'subcol';
+      row.style.cssText = colItemStyle + 'justify-content:flex-end;';
+      const tag = document.createElement('span');
+      tag.textContent = '二级';
+      tag.style.cssText = 'font-size:10px;background:#dde8ff;padding:2px 4px;border-radius:3px;color:#334a7a;flex-shrink:0;';
+      const input = document.createElement('input');
+      input.value = value; input.placeholder = '二级列字段名';
+      input.style.cssText = colInputStyle + 'font-size:12px;';
+      const [up, dn] = makeMoveBtns(row);
+      const del = document.createElement('button'); del.textContent = '删除'; del.style.cssText = smallBtnStyle + 'color:#e74c3c;'; del.onclick = () => row.remove();
+      row.appendChild(tag); row.appendChild(input); row.appendChild(up); row.appendChild(dn); row.appendChild(del);
+      return row;
+    }
+
+    function makeColItemInGroup(value = '', subFields = []) {
+      const wrapper = document.createElement('div');
+      wrapper.dataset.type = 'groupcol';
+      wrapper.style.cssText = 'border-left:3px solid #c8dfc8;padding-left:8px;margin-bottom:8px;';
+
+      const subWrap = document.createElement('div');
+      subWrap.style.cssText = 'margin-left:auto;padding-left:32px;margin-top:4px;';
+      let subExpanded = subFields.length > 0;
+      subWrap.style.display = subExpanded ? '' : 'none';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.style.cssText = smallBtnStyle + 'color:#2255aa;font-weight:700;min-width:24px;';
+      const updateToggle = () => { toggleBtn.textContent = subExpanded ? '−' : '+'; };
+      updateToggle();
+      toggleBtn.onclick = () => {
+        subExpanded = !subExpanded;
+        subWrap.style.display = subExpanded ? '' : 'none';
+        updateToggle();
+      };
+
+      const row = document.createElement('div'); row.style.cssText = colItemStyle;
+      const tag = document.createElement('span');
+      tag.textContent = '列'; tag.style.cssText = 'font-size:11px;background:#e0e0e0;padding:2px 5px;border-radius:3px;color:#555;flex-shrink:0;';
+      const input = document.createElement('input');
+      input.value = value; input.placeholder = '字段名，如：日均成交量'; input.style.cssText = colInputStyle;
+      const [up, dn] = makeMoveBtns(wrapper);
+      const del = document.createElement('button'); del.textContent = '删除'; del.style.cssText = smallBtnStyle + 'color:#e74c3c;'; del.onclick = () => wrapper.remove();
+      row.appendChild(tag); row.appendChild(input); row.appendChild(up); row.appendChild(dn); row.appendChild(toggleBtn); row.appendChild(del);
+
+      subFields.forEach(f => subWrap.appendChild(makeSubColRow(f)));
+
+      const addSubTrigger = () => { subExpanded = true; subWrap.style.display = ''; updateToggle(); subWrap.appendChild(makeSubColRow()); };
+      // 实际追加入口通过 +/展开后在 subWrap 底部追加按钮
+      const addSubRowBtn = document.createElement('button');
+      addSubRowBtn.textContent = '+ 添加二级列';
+      addSubRowBtn.style.cssText = smallBtnStyle + 'color:#2255aa;font-size:11px;margin-top:4px;';
+      addSubRowBtn.onclick = addSubTrigger;
+
+      wrapper.appendChild(row); wrapper.appendChild(subWrap); wrapper.appendChild(addSubRowBtn);
+      wrapper._getColData = () => {
+        const field = input.value.trim();
+        if (!field) return null;
+        const subs = Array.from(subWrap.children).map(r => r.querySelector('input')?.value.trim()).filter(Boolean).map(f => ({ field: f, label: f }));
+        return subs.length ? { field, label: field, subColumns: subs } : { field, label: field };
+      };
+      return wrapper;
+    }
+
+    function makePlainColRow(value = '') {
+      const row = document.createElement('div');
+      row.dataset.type = 'plain'; row.style.cssText = colItemStyle;
+      const tag = document.createElement('span');
+      tag.textContent = '列'; tag.style.cssText = 'font-size:11px;background:#e0e0e0;padding:2px 5px;border-radius:3px;color:#555;flex-shrink:0;';
+      const input = document.createElement('input');
+      input.value = value; input.placeholder = '字段名，如：城市'; input.style.cssText = colInputStyle;
+      const [up, dn] = makeMoveBtns(row);
+      const del = document.createElement('button'); del.textContent = '删除'; del.style.cssText = smallBtnStyle + 'color:#e74c3c;'; del.onclick = () => row.remove();
+      row.appendChild(tag); row.appendChild(input); row.appendChild(up); row.appendChild(dn); row.appendChild(del);
+      return row;
+    }
+
+    function makeGroupColRow(groupName = '', childItems = []) {
+      const row = document.createElement('div');
+      row.dataset.type = 'group';
+      row.style.cssText = 'border:1px solid #c8dfc8;border-radius:4px;padding:8px;margin-bottom:8px;background:#f5fdf5;';
+      const header = document.createElement('div'); header.style.cssText = colItemStyle;
+      const tag = document.createElement('span');
+      tag.textContent = '分组'; tag.style.cssText = 'font-size:11px;background:#a8d8a8;padding:2px 5px;border-radius:3px;color:#2a5a2a;flex-shrink:0;';
+      const nameInput = document.createElement('input');
+      nameInput.value = groupName; nameInput.placeholder = '分组名称，如：业财指标'; nameInput.style.cssText = colInputStyle;
+      const [up, dn] = makeMoveBtns(row);
+      const del = document.createElement('button'); del.textContent = '删除分组'; del.style.cssText = smallBtnStyle + 'color:#e74c3c;'; del.onclick = () => row.remove();
+      header.appendChild(tag); header.appendChild(nameInput); header.appendChild(up); header.appendChild(dn); header.appendChild(del);
+      const childrenWrap = document.createElement('div');
+      childrenWrap.style.cssText = 'padding-left:16px;margin-top:6px;';
+      childItems.forEach(item => {
+        const field = item.field || item;
+        const subs = (item.subColumns || []).map(s => s.field || s);
+        childrenWrap.appendChild(makeColItemInGroup(field, subs));
+      });
+      const addChildBtn = document.createElement('button');
+      addChildBtn.textContent = '+ 添加分组内列'; addChildBtn.style.cssText = smallBtnStyle + 'color:#2a7a2a;margin-top:4px;';
+      addChildBtn.onclick = () => childrenWrap.appendChild(makeColItemInGroup());
+      row.appendChild(header); row.appendChild(childrenWrap); row.appendChild(addChildBtn);
+      row._getGroupData = () => ({
+        groupName: nameInput.value.trim(),
+        columns: Array.from(childrenWrap.children).filter(el => el._getColData).map(el => el._getColData()).filter(Boolean)
+      });
+      return row;
+    }
+
+    function renderTableColumnsBuilder(columns) {
+      tableColumnsBuilder.innerHTML = '';
+      (columns || []).forEach(col => {
+        if (col.groupName) {
+          tableColumnsBuilder.appendChild(makeGroupColRow(col.groupName, col.columns || []));
+        } else {
+          tableColumnsBuilder.appendChild(makePlainColRow(col.field || col));
+        }
+      });
+    }
+
+    function getTableColumnsFromBuilder() {
+      return Array.from(tableColumnsBuilder.children).map(row => {
+        if (row.dataset.type === 'group') return row._getGroupData();
+        if (row.dataset.type === 'plain') { const val = row.querySelector('input')?.value.trim(); return val ? { field: val, label: val } : null; }
+        return null;
+      }).filter(Boolean).filter(col => col.groupName ? col.columns.length > 0 : col.field);
+    }
+
+    function addFieldToTableColumnsBuilder(field) {
+      tableColumnsBuilder.appendChild(makePlainColRow(field));
+    }
+    // ──────────────────────────────────────────────────────
+
+    function safeJsonParse(text, fallback) {
+      try { return JSON.parse(text); } catch (err) { return fallback; }
+    }
+
+    function arrayToString(arr) {
+      return (Array.isArray(arr) ? arr : []).join(',');
+    }
+
+    function stringToArray(str) {
+      return str.split(',').map(item => item.trim()).filter(Boolean);
+    }
+
+    function renderFieldList() {
+      fieldList.innerHTML = '';
+      availableFields.forEach(field => {
+        const item = document.createElement('div');
+        item.className = 'field-item';
+        const chip = document.createElement('span');
+        chip.className = 'field-chip';
+        chip.textContent = field;
+        const dimBtn = document.createElement('button');
+        dimBtn.className = 'dim';
+        dimBtn.textContent = '维度';
+        dimBtn.onclick = () => addFieldToInput(field, reportDimensionsInput);
+        const metricBtn = document.createElement('button');
+        metricBtn.className = 'metric';
+        metricBtn.textContent = '指标';
+        metricBtn.onclick = () => addFieldToInput(field, reportMetricsInput);
+        const columnBtn = document.createElement('button');
+        columnBtn.className = 'metric';
+        columnBtn.textContent = '列';
+        columnBtn.onclick = () => addFieldToTableColumnsBuilder(field);
+        item.appendChild(chip);
+        item.appendChild(dimBtn);
+        item.appendChild(metricBtn);
+        item.appendChild(columnBtn);
+        fieldList.appendChild(item);
+      });
+    }
+
+    function addFieldToInput(field, inputEl) {
+      const values = stringToArray(inputEl.value);
+      if (!values.includes(field)) {
+        values.push(field);
+      }
+      inputEl.value = values.join(',');
+    }
+
+    async function loadConfig() {
+      const [configRes, dataRes] = await Promise.all([fetch('/api/config'), fetch('/api/data')]);
+      configData = await configRes.json();
+      reportData = await dataRes.json();
+      availableFields = reportData.length ? Object.keys(reportData[0]) : [];
+      if (!configData.reportGroups) configData.reportGroups = [];
+      if (!configData.reports) configData.reports = {};
+      renderGroupTree();
+      renderGroupOptions();
+      renderFieldList();
+      if (currentReportId && configData.reports[currentReportId]) {
+        fillReportForm(configData.reports[currentReportId]);
+      } else {
+        const firstReport = findFirstReport();
+        if (firstReport) selectReport(firstReport.id);
+      }
+    }
+
+    function findFirstReport() {
+      for (const group of configData.reportGroups) {
+        if (group.reports && group.reports.length) return group.reports[0];
+      }
+      return null;
+    }
+
+    function renderGroupTree() {
+      groupTree.innerHTML = '';
+      configData.reportGroups.forEach(group => {
+        const groupDiv = document.createElement('div');
+        const titleRow = document.createElement('div');
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'center';
+        titleRow.style.justifyContent = 'space-between';
+        const title = document.createElement('div');
+        title.className = 'group-title';
+        title.textContent = group.name;
+        titleRow.appendChild(title);
+        const btnRow = document.createElement('div');
+        btnRow.style.display = 'flex';
+        btnRow.style.gap = '4px';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'small';
+        editBtn.textContent = '编辑';
+        editBtn.onclick = () => {
+          // 内联编辑：替换标题为输入框
+          const input = document.createElement('input');
+          input.value = group.name;
+          input.style.cssText = 'padding:3px 6px;border:1px solid #aaa;border-radius:3px;font-size:13px;width:120px;';
+          const confirmBtn = document.createElement('button');
+          confirmBtn.textContent = '确认';
+          confirmBtn.className = 'small';
+          confirmBtn.style.marginLeft = '4px';
+          const cancelBtn = document.createElement('button');
+          cancelBtn.textContent = '取消';
+          cancelBtn.className = 'small';
+          cancelBtn.style.marginLeft = '4px';
+          title.replaceWith(input);
+          editBtn.replaceWith(confirmBtn);
+          btnRow.insertBefore(cancelBtn, deleteBtn);
+          input.focus(); input.select();
+          const doConfirm = () => {
+            const trimmedName = input.value.trim();
+            if (trimmedName && trimmedName !== group.name) {
+              const newId = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+              if (configData.reportGroups.some(g => g.id === newId && g.id !== group.id)) {
+                adminStatus.textContent = '分组 ID 已存在，请修改名称。'; return;
+              }
+              const oldId = group.id;
+              group.name = trimmedName; group.id = newId;
+              Object.values(configData.reports).forEach(r => { if (r.groupId === oldId) r.groupId = newId; });
+            }
+            renderGroupTree(); renderGroupOptions();
+          };
+          confirmBtn.onclick = doConfirm;
+          cancelBtn.onclick = () => renderGroupTree();
+          input.onkeydown = e => { if (e.key === 'Enter') doConfirm(); if (e.key === 'Escape') renderGroupTree(); };
+        };
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'small danger';
+        deleteBtn.textContent = '删除';
+        deleteBtn.onclick = () => deleteGroup(group.id);
+        btnRow.appendChild(editBtn);
+        btnRow.appendChild(deleteBtn);
+        titleRow.appendChild(btnRow);
+        groupDiv.appendChild(titleRow);
+        if (group.reports && group.reports.length) {
+          group.reports.forEach((report, idx) => {
+            const item = document.createElement('div');
+            item.className = 'report-item';
+            item.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
+            if (report.id === currentReportId) item.classList.add('active');
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = report.name;
+            nameSpan.style.cssText = 'flex:1;cursor:pointer;';
+            nameSpan.onclick = () => selectReport(report.id, item);
+
+            const opRow = document.createElement('div');
+            opRow.style.cssText = 'display:flex;gap:4px;flex-shrink:0;';
+
+            const upBtn = document.createElement('button');
+            upBtn.className = 'small'; upBtn.textContent = '↑';
+            upBtn.title = '上移'; upBtn.disabled = idx === 0;
+            upBtn.onclick = (e) => {
+              e.stopPropagation();
+              if (idx === 0) return;
+              [group.reports[idx - 1], group.reports[idx]] = [group.reports[idx], group.reports[idx - 1]];
+              renderGroupTree();
+            };
+
+            const dnBtn = document.createElement('button');
+            dnBtn.className = 'small'; dnBtn.textContent = '↓';
+            dnBtn.title = '下移'; dnBtn.disabled = idx === group.reports.length - 1;
+            dnBtn.onclick = (e) => {
+              e.stopPropagation();
+              if (idx === group.reports.length - 1) return;
+              [group.reports[idx], group.reports[idx + 1]] = [group.reports[idx + 1], group.reports[idx]];
+              renderGroupTree();
+            };
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'small';
+            editBtn.textContent = '编辑';
+            editBtn.onclick = (e) => { e.stopPropagation(); selectReport(report.id, item); };
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'small danger';
+            delBtn.textContent = '删除';
+            delBtn.onclick = (e) => {
+              e.stopPropagation();
+              if (!confirm(`确认删除报表「${report.name}」吗？`)) return;
+              group.reports = group.reports.filter(r => r.id !== report.id);
+              delete configData.reports[report.id];
+              if (currentReportId === report.id) currentReportId = null;
+              renderGroupTree();
+              const next = findFirstReport();
+              if (next) selectReport(next.id, null);
+              else clearForm();
+              adminStatus.textContent = '报表已删除，请发布配置。';
+            };
+
+            opRow.appendChild(upBtn);
+            opRow.appendChild(dnBtn);
+            opRow.appendChild(editBtn);
+            opRow.appendChild(delBtn);
+            item.appendChild(nameSpan);
+            item.appendChild(opRow);
+            groupDiv.appendChild(item);
+          });
+        } else {
+          const empty = document.createElement('div');
+          empty.style.color = '#888';
+          empty.style.padding = '6px 10px';
+          empty.textContent = '暂无报表';
+          groupDiv.appendChild(empty);
+        }
+        groupTree.appendChild(groupDiv);
+      });
+    }
+
+    function renderGroupOptions() {
+      reportGroupSelect.innerHTML = '';
+      configData.reportGroups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = group.name;
+        reportGroupSelect.appendChild(option);
+      });
+    }
+
+    function selectReport(id, itemElement) {
+      currentReportId = id;
+      const report = configData.reports[id];
+      if (!report) return;
+      renderGroupTree();
+      fillReportForm(report);
+    }
+
+    function fillReportForm(report) {
+      reportIdInput.value = report.id;
+      reportNameInput.value = report.name || '';
+      reportDescInput.value = report.description || '';
+      reportGroupSelect.value = report.groupId || (configData.reportGroups[0] && configData.reportGroups[0].id) || '';
+      reportDimensionsInput.value = arrayToString(report.dimensions);
+      reportMetricsInput.value = arrayToString(report.metrics);
+      reportDashboardMetricsInput.value = arrayToString(report.layout?.dashboardMetrics || []);
+      reportRefreshSelect.value = report.refresh || '15min';
+      renderTableColumnsBuilder(report.layout?.tableColumns || []);
+      const mode = report.layout?.tableMode || 'standard';
+      reportTableModeSelect.value = mode;
+      comparisonsSection.style.display = mode === 'vertical' ? '' : 'none';
+      const comparisons = report.layout?.tableComparisons || [];
+      cmpDow.checked = comparisons.includes('dow');
+      cmpWow.checked = comparisons.includes('wow');
+      cmpYoy.checked = comparisons.includes('yoy');
+      renderPanelRows(report.layout?.panels || []);
+    }
+
+    function renderPanelRows(panels) {
+      panelList.innerHTML = '';
+      if (Array.isArray(panels) && panels.length) {
+        panels.forEach(panel => addPanelRow(panel));
+      }
+    }
+
+    function addPanelRow(panel = {}) {
+      const row = document.createElement('div');
+      row.className = 'panel-row';
+      row.dataset.panelId = panel.id || '';
+      const titleInput = document.createElement('input');
+      titleInput.value = panel.title || '';
+      titleInput.placeholder = '面板标题';
+      const metricsInput = document.createElement('input');
+      metricsInput.value = arrayToString(panel.metrics || []);
+      metricsInput.placeholder = '指标，逗号分隔';
+      const chartTypeSelect = document.createElement('select');
+      ['line', 'bar'].forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type === 'line' ? '折线图' : '柱状图';
+        if (panel.type === type) option.selected = true;
+        chartTypeSelect.appendChild(option);
+      });
+      const moveUpBtn = document.createElement('button');
+      moveUpBtn.className = 'small';
+      moveUpBtn.textContent = '↑';
+      moveUpBtn.title = '上移';
+      moveUpBtn.onclick = () => movePanelRow(row, 'up');
+      const moveDownBtn = document.createElement('button');
+      moveDownBtn.className = 'small';
+      moveDownBtn.textContent = '↓';
+      moveDownBtn.title = '下移';
+      moveDownBtn.onclick = () => movePanelRow(row, 'down');
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'small danger';
+      removeBtn.textContent = '删除';
+      removeBtn.onclick = () => row.remove();
+      row.appendChild(titleInput);
+      row.appendChild(metricsInput);
+      row.appendChild(chartTypeSelect);
+      row.appendChild(moveUpBtn);
+      row.appendChild(moveDownBtn);
+      row.appendChild(removeBtn);
+      panelList.appendChild(row);
+    }
+
+    function movePanelRow(row, direction) {
+      const sibling = direction === 'up' ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling) return;
+      if (direction === 'up') {
+        panelList.insertBefore(row, sibling);
+      } else {
+        panelList.insertBefore(sibling, row);
+      }
+    }
+
+    function getPanelRows() {
+      const rows = Array.from(panelList.children);
+      return rows.map(row => {
+        const inputs = row.querySelectorAll('input');
+        const titleInput = inputs[0];
+        const metricsInput = inputs[1];
+        const chartTypeSelect = row.querySelector('select');
+        return {
+          id: row.dataset.panelId || 'p_' + Math.random().toString(36).substr(2, 6),
+          title: titleInput.value.trim() || '面板',
+          type: chartTypeSelect ? chartTypeSelect.value : 'line',
+          metrics: stringToArray(metricsInput.value)
+        };
+      }).filter(panel => panel.title);
+    }
+
+    function getFormReport() {
+      const id = reportIdInput.value.trim();
+      if (!id) return null;
+      const panels = getPanelRows();
+      const dashboardMetrics = stringToArray(reportDashboardMetricsInput.value);
+      const tableColumns = getTableColumnsFromBuilder();
+      const tableMode = reportTableModeSelect.value;
+      const tableComparisons = ['dow','wow','yoy'].filter(k => document.getElementById('cmp'+k[0].toUpperCase()+k.slice(1)).checked);
+      const layout = { chartType: 'line' };
+      if (dashboardMetrics.length) layout.dashboardMetrics = dashboardMetrics;
+      if (panels.length) layout.panels = panels;
+      if (tableColumns.length) layout.tableColumns = tableColumns;
+      if (tableMode === 'vertical') {
+        layout.tableMode = 'vertical';
+        if (tableComparisons.length) layout.tableComparisons = tableComparisons;
+      }
+      return {
+        id,
+        name: reportNameInput.value.trim() || '未命名报表',
+        groupId: reportGroupSelect.value,
+        description: reportDescInput.value.trim(),
+        dimensions: stringToArray(reportDimensionsInput.value),
+        metrics: stringToArray(reportMetricsInput.value),
+        layout,
+        refresh: reportRefreshSelect.value,
+        dataSource: 'report_db'
+      };
+    }
+
+    function addGroup() {
+      const name = newGroupName.value.trim();
+      if (!name) {
+        adminStatus.textContent = '请输入分组名称。';
+        return;
+      }
+      const id = 'grp_' + Date.now();
+      configData.reportGroups.push({ id, name, reports: [] });
+      renderGroupTree();
+      renderGroupOptions();
+      newGroupName.value = '';
+      adminStatus.textContent = '分组已新增。';
+    }
+
+    function editGroup(groupId) {
+      const group = configData.reportGroups.find(g => g.id === groupId);
+      if (!group) return;
+      const newName = prompt('请输入新的分组名称：', group.name);
+      if (!newName || newName.trim() === group.name) return;
+      const trimmedName = newName.trim();
+      const newId = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      if (configData.reportGroups.some(g => g.id === newId && g.id !== groupId)) {
+        adminStatus.textContent = '分组 ID 已存在，请修改名称。';
+        return;
+      }
+      group.name = trimmedName;
+      group.id = newId;
+      // 更新所有报表的分组ID
+      Object.values(configData.reports).forEach(report => {
+        if (report.groupId === groupId) {
+          report.groupId = newId;
+        }
+      });
+      renderGroupTree();
+      renderGroupOptions();
+      adminStatus.textContent = '分组已重命名。';
+    }
+
+    function deleteGroup(groupId) {
+      const group = configData.reportGroups.find(g => g.id === groupId);
+      if (!group) return;
+      if (group.reports && group.reports.length) {
+        adminStatus.textContent = '分组内有报表，无法删除。请先删除或移动报表。';
+        return;
+      }
+      if (!confirm(`确认删除分组 "${group.name}" 吗？`)) return;
+      configData.reportGroups = configData.reportGroups.filter(g => g.id !== groupId);
+      renderGroupTree();
+      renderGroupOptions();
+      adminStatus.textContent = '分组已删除。';
+    }
+
+    function createNewReport() {
+      if (!configData.reportGroups.length) {
+        adminStatus.textContent = '请先新增一个报表分组。';
+        return;
+      }
+      const groupId = configData.reportGroups[0].id;
+      const id = 'report_' + Date.now();
+      const report = {
+        id,
+        name: '新报表',
+        groupId,
+        description: '',
+        dimensions: ['城市', '业务线', '时间'],
+        metrics: ['支付单量'],
+        layout: { chartType: 'line', panels: [{ id: 'p1', title: '趋势', type: 'line', metrics: ['支付单量'] }], tableColumns: [{ field: '城市', label: '城市' }, { field: '支付单量', label: '支付单量' }] },
+        refresh: '15min',
+        dataSource: 'report_db'
+      };
+      configData.reports[id] = report;
+      const group = configData.reportGroups.find(g => g.id === groupId);
+      group.reports.push({ id, name: report.name, type: report.refresh === 'daily' ? 'daily' : 'realtime' });
+      currentReportId = id;
+      renderGroupTree();
+      renderGroupOptions();
+      fillReportForm(report);
+      adminStatus.textContent = '已创建新报表，请编辑并保存。';
+    }
+
+    function saveReport() {
+      const report = getFormReport();
+      if (!report) {
+        adminStatus.textContent = '当前报表 ID 不可为空。';
+        return;
+      }
+      // 检查面板指标是否为空
+      const emptyPanels = (report.layout?.panels || []).filter(p => !p.metrics?.length);
+      if (emptyPanels.length) {
+        adminStatus.textContent = `面板「${emptyPanels.map(p=>p.title).join('、')}」未填写指标，请补充后保存。`;
+        return;
+      }
+      const oldReport = configData.reports[report.id];
+      if (!oldReport) {
+        adminStatus.textContent = '没有找到当前报表，请重新选择。';
+        return;
+      }
+      const oldGroup = configData.reportGroups.find(g => g.id === oldReport.groupId);
+      const newGroup = configData.reportGroups.find(g => g.id === report.groupId);
+      if (oldReport.groupId !== report.groupId && oldGroup && newGroup) {
+        oldGroup.reports = oldGroup.reports.filter(item => item.id !== report.id);
+        newGroup.reports.push({ id: report.id, name: report.name, type: report.refresh === 'daily' ? 'daily' : 'realtime' });
+      } else {
+        const item = newGroup.reports.find(item => item.id === report.id);
+        if (item) item.name = report.name;
+      }
+      configData.reports[report.id] = report;
+      renderGroupTree();
+      adminStatus.textContent = '报表已保存。请发布配置后刷新展示页面。';
+    }
+
+    function deleteReport() {
+      const id = reportIdInput.value.trim();
+      if (!id) return;
+      if (!configData.reports[id]) {
+        adminStatus.textContent = '当前报表不存在。';
+        return;
+      }
+      if (!confirm('确认删除当前报表吗？')) return;
+      const report = configData.reports[id];
+      const group = configData.reportGroups.find(g => g.id === report.groupId);
+      if (group) {
+        group.reports = group.reports.filter(item => item.id !== id);
+      }
+      delete configData.reports[id];
+      currentReportId = null;
+      renderGroupTree();
+      const next = findFirstReport();
+      if (next) selectReport(next.id);
+      else {
+        clearForm();
+        adminStatus.textContent = '报表已删除。请新增报表。';
+      }
+    }
+
+    function clearForm() {
+      reportIdInput.value = '';
+      reportNameInput.value = '';
+      reportDescInput.value = '';
+      reportDimensionsInput.value = '';
+      reportMetricsInput.value = '';
+      reportRefreshSelect.value = '15min';
+      reportTableColumnsInput.value = '';
+      tableColumnsBuilder.innerHTML = '';      panelList.innerHTML = '';
+    }
+
+    async function saveConfigFile() {
+      saveConfigBtn.disabled = true;
+      adminStatus.textContent = '发布中...';
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configData)
+      });
+      const result = await res.json();
+      saveConfigBtn.disabled = false;
+      if (result.success) {
+        adminStatus.textContent = '配置已发布。请刷新仪表盘页面查看最新效果。';
+      } else {
+        adminStatus.textContent = '发布失败：' + (result.error || '未知错误');
+      }
+    }
+
+    function downloadConfigFile() {
+      const blob = new Blob([JSON.stringify(configData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'report-config-export.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      adminStatus.textContent = '已导出当前配置。';
+    }
+
+    function importConfigFile() {
+      configFileInput.click();
+    }
+
+    configFileInput.addEventListener('change', async () => {
+      const file = configFileInput.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text);
+        if (!imported.reportGroups || !imported.reports) {
+          throw new Error('无效配置结构');
+        }
+        configData = imported;
+        renderGroupTree();
+        renderGroupOptions();
+        renderFieldList();
+        const firstReport = findFirstReport();
+        if (firstReport) selectReport(firstReport.id);
+        adminStatus.textContent = '配置已导入，请检查并发布。';
+      } catch (err) {
+        adminStatus.textContent = '导入失败：' + err.message;
+      } finally {
+        configFileInput.value = '';
+      }
+    });
+
+    addGroupBtn.addEventListener('click', addGroup);
+    newReportBtn.addEventListener('click', createNewReport);
+    exportConfigBtn.addEventListener('click', downloadConfigFile);
+    importConfigBtn.addEventListener('click', importConfigFile);
+    saveReportBtn.addEventListener('click', saveReport);
+    deleteReportBtn.addEventListener('click', deleteReport);
+    saveConfigBtn.addEventListener('click', saveConfigFile);
+    addPanelRowBtn.addEventListener('click', () => addPanelRow());
+    document.getElementById('addColBtn').addEventListener('click', () => tableColumnsBuilder.appendChild(makePlainColRow()));
+    document.getElementById('addColGroupBtn').addEventListener('click', () => tableColumnsBuilder.appendChild(makeGroupColRow()));
+    
+    loadConfig().catch(err => { adminStatus.textContent = '加载配置失败：' + err.message; });
+  </script>
+</body>
+</html>

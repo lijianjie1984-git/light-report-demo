@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>报表演示页面</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #a3ff7a 0%, #2cac2d 100%); min-height: 100vh; }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 300px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-right: 1px solid rgba(255, 255, 255, 0.2); padding: 24px; overflow-y: auto; box-shadow: 2px 0 20px rgba(0,0,0,0.1); }
+    .content { flex: 1; padding: 24px; overflow-y: auto; }
+    .group { margin-bottom: 16px; }
+    .group-title { font-weight: 600; margin-bottom: 12px; color: #1b441d; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .report-item { padding: 12px 16px; cursor: pointer; border-radius: 8px; transition: all 0.3s ease; margin-bottom: 4px; }
+    .report-item:hover { background: linear-gradient(135deg, #28a745 0%, #2ecc71 100%); color: white; transform: translateX(5px); }
+    .report-item.active { background: linear-gradient(135deg, #28a745 0%, #2ecc71 100%); color: white; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); }
+    .report-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); position: relative; z-index: 10; }
+    #reportTitle { margin: 0 0 8px 0; color: #2c3e50; font-size: 28px; font-weight: 700; }
+    #reportDesc { margin: 0 0 20px 0; color: #7f8c8d; font-size: 16px; }
+    #filterArea { margin-bottom: 24px; position: relative; z-index: 100; }
+    #dashboardArea { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .metric-card { background: #ffffff; backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 12px; padding: 20px; cursor: pointer; text-align: center; transition: all 0.25s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+    .metric-card:hover { border-color: rgba(80, 165, 255, 0.65); transform: translateY(-3px); box-shadow: 0 10px 30px rgba(80, 165, 255, 0.14); }
+    .metric-card.selected { border-color: rgba(80, 165, 255, 0.7); background: rgba(230, 245, 255, 0.95); box-shadow: 0 10px 30px rgba(80, 165, 255, 0.18); }
+    .metric-card .label { font-size: 14px; color: #4a5a34; margin-bottom: 12px; font-weight: 500; }
+    .metric-card .value { font-size: 28px; font-weight: 700; color: #2c3e50; }
+    .filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; position: relative; z-index: 100; }
+    .filter-item { display: flex; flex-direction: column; min-width: 200px; }
+    .filter-item label { margin-bottom: 8px; font-weight: 600; color: #2c3e50; font-size: 14px; }
+    select, input[type="text"] { padding: 12px 16px; border: 2px solid #e8e8e8; border-radius: 8px; background: #ffffff; backdrop-filter: blur(10px); font-size: 14px; transition: all 0.3s ease; color: #333; }
+    select:focus, input[type="text"]:focus { outline: none; border-color: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1); }
+    .date-picker-container { display: none; flex-direction: column; gap: 8px; padding: 12px; background: #ffffff; border: 2px solid #e8e8e8; border-radius: 8px; margin-top: 4px; }
+    .date-picker-container.show { display: flex; }
+    .date-picker-trigger { padding: 12px 16px; border: 2px solid #e8e8e8; border-radius: 8px; background: #ffffff; font-size: 14px; cursor: pointer; transition: all 0.3s ease; color: #333; }
+    .date-picker-trigger:hover { border-color: #28a745; }
+    .date-picker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .date-picker-btn { background: #28a745; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    .date-picker-btn:hover { background: #20c997; }
+    .date-picker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+    .date-picker-cell { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 12px; background: #f9f9f9; transition: all 0.2s; }
+    .date-picker-cell:hover { background: #e8f5e9; border-color: #28a745; }
+    .date-picker-cell.selected { background: #28a745; color: white; border-color: #28a745; font-weight: 600; }
+    .date-picker-cell.empty { cursor: default; } 
+    .date-picker-cell.empty:hover { background: #f9f9f9; border-color: #e0e0e0; }
+    .date-picker-month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+    .date-picker-month-btn { padding: 8px 12px; border: 1px solid #e8e8e8; border-radius: 4px; cursor: pointer; background: #f9f9f9; transition: all 0.2s; font-size: 13px; }
+    .date-picker-month-btn:hover { background: #e8f5e9; border-color: #28a745; }
+    .date-picker-month-btn.selected { background: #28a745; color: white; border-color: #28a745; }
+    .filter-button { margin-top: 4px; padding: 12px 18px; border: none; border-radius: 8px; background: #6ee07b; color: #ffffff; font-weight: 700; cursor: pointer; transition: all 0.25s ease; }
+    .filter-button:hover { background: #5acb65; }
+    #charts { margin-bottom: 32px; }
+    .chart-container { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    .chart-title { font-weight: 700; margin-bottom: 16px; color: #2c3e50; font-size: 18px; }
+    #tableArea { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.1); text-align: left; }
+    th { background: linear-gradient(135deg, #28a745 0%, #2ecc71 100%); color: white; font-weight: 600; }
+    tbody tr:hover { background: rgba(46, 204, 113, 0.08); }
+    #detailPanel { display:none; width:620px; min-width:620px; height:100vh; background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,0.12); flex-direction:column; overflow:hidden; position:sticky; top:0; }
+    #detailPanel.open { display:flex; }
+    #detailPanel .dp-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:linear-gradient(135deg,#28a745,#2ecc71); color:#fff; flex-shrink:0; }
+    #detailPanel .dp-title { font-size:17px; font-weight:700; }
+    #detailPanel .dp-close { background:none; border:none; color:#fff; font-size:22px; cursor:pointer; line-height:1; padding:0 4px; }
+    #detailPanel .dp-body { flex:1; overflow:auto; padding:16px; }
+    #detailPanel table { width:100%; border-collapse:collapse; font-size:13px; }
+    #detailPanel th { background:#28a745; color:#fff; font-weight:600; padding:8px 10px; text-align:center; white-space:nowrap; }
+    #detailPanel th.dim-col { background:#1e7e34; }
+    #detailPanel td { padding:7px 10px; border-bottom:1px solid #e8e8e8; text-align:right; white-space:nowrap; }
+    #detailPanel td.dim-cell { text-align:left; font-weight:500; color:#2c3e50; background:#f9f9f9; }
+    #detailPanel tr.total-row td { font-weight:700; background:#e8f5e9; }
+    .metric-row-clickable { cursor:pointer; }
+    .metric-row-clickable:hover td { background:rgba(40,167,69,0.06) !important; }
+
+    /* 迷你折线图 */
+    .sparkline-wrap { display:inline-flex; align-items:center; justify-content:center; cursor:pointer; position:relative; }
+    .sparkline-wrap:hover svg { filter: drop-shadow(0 0 3px rgba(40,167,69,0.5)); }
+    .sparkline-tooltip { position:fixed; background:rgba(30,30,30,0.88); color:#fff; font-size:11px; padding:4px 8px; border-radius:4px; pointer-events:none; white-space:nowrap; z-index:9999; display:none; line-height:1.5; }
+
+    /* 放大弹窗 */
+    #sparkModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center; }
+    #sparkModal.open { display:flex; }
+    #sparkModal .sm-box { background:#fff; border-radius:12px; padding:20px; width:520px; max-width:92vw; box-shadow:0 8px 40px rgba(0,0,0,0.2); }
+    #sparkModal .sm-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    #sparkModal .sm-title { font-size:15px; font-weight:700; color:#2c3e50; }
+    #sparkModal .sm-close { background:none; border:none; font-size:20px; cursor:pointer; color:#7f8c8d; line-height:1; }
+    #sparkModal #smChart { width:100%; height:260px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar">
+      <h2>报表目录</h2>
+      <div id="reportTree"></div>
+    </div>
+    <div class="content">
+      <div class="report-header">
+        <h1 id="reportTitle">请选择报表</h1>
+        <p id="reportDesc"></p>
+        <div id="filterArea"></div>
+      </div>
+      <div id="dashboardArea"></div>
+      <div id="charts"></div>
+      <div id="tableArea"></div>
+    </div>
+    <div id="detailPanel">
+      <div class="dp-header">
+        <span class="dp-title" id="detailPanelTitle"></span>
+        <button class="dp-close" onclick="closeDetailPanel()">×</button>
+      </div>
+      <div class="dp-body" id="detailPanelBody"></div>
+    </div>
+  </div>
+
+  <!-- 迷你图放大弹窗 -->
+  <div id="sparkModal">
+    <div class="sm-box">
+      <div class="sm-header">
+        <span class="sm-title" id="smTitle"></span>
+        <button class="sm-close" id="smClose">×</button>
+      </div>
+      <div id="smChart"></div>
+    </div>
+  </div>
+  <div class="sparkline-tooltip" id="sparkTooltip"></div>
+
+  <script>
+    let configData;
+    let reportData;
+    let currentReport;
+    let chartInstances = [];
+    let currentFilters = {};
+    let currentVisibleColumns = [];
+    let selectedDashboardMetrics = [];
+    let compareDate = ''; // 对比日期
+    let collapsedCols = new Set(); // 已折叠的一级列 field
+    let subColsInitialized = false;
+
+    const chartsEl = document.getElementById('charts');
+    const reportTree = document.getElementById('reportTree');
+    const reportTitle = document.getElementById('reportTitle');
+    const reportDesc = document.getElementById('reportDesc');
+    const dashboardArea = document.getElementById('dashboardArea');
+    const filterArea = document.getElementById('filterArea');
+    const tableArea = document.getElementById('tableArea');
+
+    async function loadConfig() {
+      const [configRes, dataRes] = await Promise.all([fetch('/api/config'), fetch('/api/data')]);
+      configData = await configRes.json();
+      reportData = await dataRes.json();
+      renderTree();
+      const firstReport = findFirstReport();
+      if (firstReport) {
+        const firstItem = reportTree.querySelector('.report-item');
+        if (firstItem) selectReport(firstReport.id, firstItem);
+      }
+    }
+
+    function findFirstReport() {
+      for (const group of configData.reportGroups) {
+        if (group.reports && group.reports.length) return group.reports[0];
+      }
+      return null;
+    }
+
+    function renderTree() {
+      reportTree.innerHTML = '';
+      configData.reportGroups.forEach(group => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'group';
+        const title = document.createElement('div');
+        title.className = 'group-title';
+        title.textContent = group.name;
+        groupDiv.appendChild(title);
+        group.reports.forEach(report => {
+          const item = document.createElement('div');
+          item.className = 'report-item';
+          item.textContent = report.name;
+          item.onclick = () => selectReport(report.id, item);
+          groupDiv.appendChild(item);
+        });
+        reportTree.appendChild(groupDiv);
+      });
+    }
+
+    function selectReport(reportId, element) {
+      const items = document.querySelectorAll('.report-item');
+      items.forEach(i => i.classList.remove('active'));
+      element.classList.add('active');
+      currentReport = configData.reports[reportId];
+      currentFilters = {};
+      currentVisibleColumns = [];
+      selectedDashboardMetrics = [];
+      collapsedCols = new Set();
+      subColsInitialized = false;
+      renderReport();
+    }
+
+    function renderReport() {
+      if (!currentReport) return;
+      reportTitle.textContent = currentReport.name;
+      reportDesc.textContent = currentReport.description || '';
+      renderFilters();
+      renderDashboard();
+      renderCharts();
+      renderTable();
+    }
+
+    function getXAxisField() {
+      if (!currentReport || !Array.isArray(currentReport.dimensions) || !currentReport.dimensions.length) {
+        return '日期';
+      }
+      return currentReport.dimensions[0];
+    }
+
+    function getSplitFields() {
+      if (!currentReport || !Array.isArray(currentReport.dimensions)) return [];
+      return currentReport.dimensions.slice(1);
+    }
+
+    function getFilteredData() {
+      const dateField = getDateField();
+      const endKey = dateField + '_end';
+      return reportData.filter(row => {
+        return Object.entries(currentFilters).every(([field, value]) => {
+          if (!value) return true;
+          if (field === endKey) return true; // 结束日期单独处理
+          if (field === dateField && currentFilters[endKey]) {
+            // 日期范围筛选
+            return row[field] >= value && row[field] <= currentFilters[endKey];
+          }
+          if (value.includes(',')) {
+            return value.split(',').filter(v => v).includes(row[field]);
+          }
+          return row[field] === value;
+        });
+      });
+    }
+
+    function getXAxisValues(xField) {
+      const values = [];
+      getFilteredData().forEach(row => {
+        const key = row[xField] !== undefined ? row[xField] : row['日期'];
+        if (!values.includes(key)) values.push(key);
+      });
+      return values;
+    }
+
+    const DIMENSION_ORDER = {
+      '业务线':   ['直营','加盟','外发'],
+      '客户类型': ['B','C','KA直客','KA渠道','KA外发'],
+      '服务类型': ['自营运力','三方运力（外发）'],
+    };
+
+    function getDistinctValues(field) {
+      const vals = Array.from(new Set(reportData.map(row => row[field]).filter(v => v !== undefined)));
+      const order = DIMENSION_ORDER[field];
+      if (order) {
+        return [...order.filter(v => vals.includes(v)), ...vals.filter(v => !order.includes(v))];
+      }
+      return vals.sort();
+    }
+
+    function getSeries(metric, xField, splitFields) {
+      const xAxis = getXAxisValues(xField);
+      const metricValues = {};
+      getFilteredData().forEach(row => {
+        const key = row[xField] !== undefined ? row[xField] : row['日期'];
+        if (!metricValues[key]) metricValues[key] = { key };
+        const category = splitFields.length
+          ? splitFields.map(field => row[field] ?? '全部').join(' | ')
+          : '全部';
+        metricValues[key][category] = row[metric];
+      });
+      const categories = Array.from(new Set(getFilteredData().map(row => {
+        return splitFields.length
+          ? splitFields.map(field => row[field] ?? '全部').join(' | ')
+          : '全部';
+      })));
+      const seriesData = categories.map(category => {
+        const data = xAxis.map(key => {
+          const row = metricValues[key] || {};
+          return row[category] ?? 0;
+        });
+        return { name: category, data };
+      });
+      return { xAxis, seriesData };
+    }
+
+    function isPercentageMetric(metric) {
+      return /率$/.test(metric) || metric.includes('率');
+    }
+
+    function calculateMetricValue(metric) {
+      const filtered = getFilteredData();
+      if (!filtered.length) return 0;
+      const values = filtered.map(row => row[metric]).filter(v => typeof v === 'number');
+      if (!values.length) return 0;
+      if (isPercentageMetric(metric)) {
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        return avg * 100;
+      }
+      return values.reduce((a, b) => a + b, 0);
+    }
+
+    function calcWeekOverWeek(metric) {
+      // 环比上一天同截止时间，实际接入数据源后替换
+      const seed = metric.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      const pct = ((seed % 41) - 20) / 100; // -20% ~ +20% 固定伪随机
+      return pct;
+    }
+
+    function renderDashboard() {
+      dashboardArea.innerHTML = '';
+      const dashboardMetrics = currentReport.layout?.dashboardMetrics || [];
+      dashboardArea.style.display = dashboardMetrics.length ? '' : 'none';
+      if (!dashboardMetrics.length) return;
+      dashboardMetrics.forEach(metric => {
+        const card = document.createElement('div');
+        card.className = 'metric-card';
+        if (selectedDashboardMetrics.includes(metric)) card.classList.add('selected');
+
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = metric;
+
+        const value = document.createElement('div');
+        value.className = 'value';
+        const metricValue = calculateMetricValue(metric);
+        value.textContent = metricValue.toLocaleString('zh-CN', { maximumFractionDigits: isPercentageMetric(metric) ? 1 : 0 }) + (isPercentageMetric(metric) ? '%' : '');
+
+        const wow = calcWeekOverWeek(metric);
+        const wowEl = document.createElement('div');
+        wowEl.className = 'metric-wow';
+        const sign = wow >= 0 ? '+' : '';
+        const wowPct = sign + (wow * 100).toFixed(1) + '%';
+        wowEl.textContent = wowPct + ' 环比';
+        wowEl.style.cssText = 'font-size:12px;margin-top:8px;font-weight:500;color:' + (wow >= 0 ? '#27ae60' : '#e74c3c') + ';';
+
+        card.appendChild(label);
+        card.appendChild(value);
+        card.appendChild(wowEl);
+        card.onclick = () => toggleDashboardMetric(metric);
+        dashboardArea.appendChild(card);
+      });
+    }
+
+    function toggleDashboardMetric(metric) {
+      if (selectedDashboardMetrics.includes(metric)) {
+        selectedDashboardMetrics = selectedDashboardMetrics.filter(m => m !== metric);
+      } else {
+        selectedDashboardMetrics.push(metric);
+      }
+      renderDashboard();
+      renderCharts();
+    }
+
+    function clearCharts() {
+      chartInstances.forEach(instance => instance.dispose());
+      chartInstances = [];
+      chartsEl.innerHTML = '';
+    }
+
+    function renderCharts() {
+      clearCharts();
+      const hasPanels = currentReport.layout?.panels?.length > 0;
+      chartsEl.style.display = hasPanels ? '' : 'none';
+      if (!hasPanels) return;
+      // Generate time points for 24 hours with 15-minute intervals
+      const timePoints = [];
+      for (let hour = 0; hour < 24; hour++) {
+        for (let min = 0; min < 60; min += 15) {
+          timePoints.push(`${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`);
+        }
+      }
+
+      // Create single chart container
+      const chartContainer = document.createElement('div');
+      chartContainer.className = 'chart-container';
+      const title = document.createElement('div');
+      title.className = 'chart-title';
+      title.textContent = '实时监控数据趋势图';
+      
+      // 添加对比日期选择框到图表容器中
+      const compareDateContainer = document.createElement('div');
+      compareDateContainer.className = 'compare-date-container';
+      compareDateContainer.style.cssText = 'margin-top: 10px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;';
+      
+      const compareDateLabel = document.createElement('label');
+      compareDateLabel.textContent = '对比日期：';
+      compareDateLabel.style.cssText = 'font-weight: 600; color: #2c3e50; font-size: 14px;';
+      
+      const compareDateItem = createCompareDatePickerItem(
+        compareDate,
+        (newDate) => { compareDate = newDate; renderCharts(); },
+        () => { compareDate = ''; renderCharts(); }
+      );
+      
+      compareDateContainer.appendChild(compareDateLabel);
+      compareDateContainer.appendChild(compareDateItem);
+      
+      const container = document.createElement('div');
+      container.style.width = '100%';
+      container.style.height = '400px';
+      chartContainer.appendChild(title);
+      chartContainer.appendChild(compareDateContainer);
+      chartContainer.appendChild(container);
+      chartsEl.appendChild(chartContainer);
+
+      if (!selectedDashboardMetrics.length) {
+        container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #7f8c8d; font-size: 16px;">请点击上方指标卡片选择要监控的指标</div>';
+        return;
+      }
+
+      const chart = echarts.init(container);
+      chartInstances.push(chart);
+
+      // Generate series data for selected metrics
+      const seriesData = [];
+      const legendData = [];
+      
+      selectedDashboardMetrics.forEach(metric => {
+        const percentMetric = isPercentageMetric(metric);
+        const baseValue = calculateMetricValue(metric) / 96;
+        
+        // 当前日期数据
+        const currentData = timePoints.map(() => {
+          const variation = (Math.random() - 0.5) * baseValue * (percentMetric ? 0.12 : 0.2);
+          const value = baseValue + variation;
+          return percentMetric ? Number(Math.max(0, value).toFixed(1)) : Math.max(0, Math.round(value));
+        });
+        
+        seriesData.push({
+          name: compareDate ? `${metric} (今日)` : metric,
+          type: 'line',
+          data: currentData,
+          yAxisIndex: percentMetric ? 1 : 0,
+          smooth: true,
+          symbol: 'none',
+          lineStyle: { width: 2 }
+        });
+        legendData.push(compareDate ? `${metric} (今日)` : metric);
+        
+        // 对比日期数据
+        if (compareDate) {
+          const compareData = timePoints.map(() => {
+            const variation = (Math.random() - 0.5) * baseValue * (percentMetric ? 0.12 : 0.2);
+            const value = baseValue + variation;
+            return percentMetric ? Number(Math.max(0, value).toFixed(1)) : Math.max(0, Math.round(value));
+          });
+          
+          seriesData.push({
+            name: `${metric} (${compareDate})`,
+            type: 'line',
+            data: compareData,
+            yAxisIndex: percentMetric ? 1 : 0,
+            smooth: true,
+            symbol: 'none',
+            lineStyle: { width: 2, type: 'dashed' },
+            itemStyle: { color: '#e74c3c' }
+          });
+          legendData.push(`${metric} (${compareDate})`);
+        }
+      });
+
+      const hasPercent = selectedDashboardMetrics.some(isPercentageMetric);
+      const labelInterval = Math.max(1, Math.floor(timePoints.length / 12));
+      const yAxis = [
+        { type: 'value', name: '数值', position: 'left' }
+      ];
+      if (hasPercent) {
+        yAxis.push({ type: 'value', name: '比率', position: 'right', axisLabel: { formatter: '{value} %' } });
+      }
+
+      chart.setOption({
+        tooltip: { 
+          trigger: 'axis',
+          formatter: function(params) {
+            let result = `${params[0].name}<br/>`;
+            params.forEach(param => {
+              const suffix = isPercentageMetric(param.seriesName.replace(' (今日)', '').replace(` (${compareDate})`, '')) ? '%' : '';
+              result += `${param.seriesName}: ${param.value}${suffix}<br/>`;
+            });
+            return result;
+          }
+        },
+        legend: { data: legendData, top: 30 },
+        xAxis: { 
+          type: 'category', 
+          data: timePoints,
+          axisLabel: {
+            interval: labelInterval,
+            rotate: 45,
+            formatter: function(value) {
+              return value;
+            }
+          }
+        },
+        yAxis,
+        series: seriesData,
+        grid: { left: '3%', right: hasPercent ? '12%' : '4%', bottom: '8%', top: '15%', containLabel: true },
+        dataZoom: [
+          {
+            type: 'slider',
+            start: 0,
+            end: 100,
+            bottom: 10
+          }
+        ]
+      });
+    }
+
+    function getDateField() {
+      if (!currentReport || !Array.isArray(currentReport.dimensions)) return '日期';
+      const field = currentReport.dimensions.find(item => item === '日期' || item === '时间') || '日期';
+      if (field === '时间' && !reportData.some(row => row['时间'] !== undefined)) {
+        return '日期';
+      }
+      return field;
+    }
+
+    function getBusinessLineField() {
+      return '业务线';
+    }
+
+    function getCityField() {
+      return '城市';
+    }
+
+    function getCityOptions() {
+      const businessLineFilter = currentFilters[getBusinessLineField()] || '';
+      let rows = reportData;
+      
+      // 如果有业务线筛选，过滤数据
+      if (businessLineFilter) {
+        if (businessLineFilter.includes(',')) {
+          const selectedBusinessLines = businessLineFilter.split(',').filter(v => v);
+          rows = reportData.filter(row => selectedBusinessLines.includes(row[getBusinessLineField()]));
+        } else {
+          rows = reportData.filter(row => row[getBusinessLineField()] === businessLineFilter);
+        }
+      }
+      
+      const cities = Array.from(new Set(rows.map(row => row[getCityField()]).filter(Boolean))).sort();
+      return ['全部', ...cities];
+    }
+
+    function parseDateString(dateStr) {
+      const match = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return { year: parseInt(match[1]), month: parseInt(match[2]), day: parseInt(match[3]) };
+      return { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: new Date().getDate() };
+    }
+
+    function formatDate(year, month, day) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+
+    function getDaysInMonth(year, month) {
+      return new Date(year, month, 0).getDate();
+    }
+
+    function createCompareDatePickerItem(currentValue, onDateSelect, onClear) {
+      const item = document.createElement('div');
+      item.className = 'filter-item';
+      item.style.margin = '0';
+
+      const date = currentValue ? parseDateString(currentValue) : parseDateString('');
+      let selectedYear = date.year;
+      let selectedMonth = date.month;
+      let selectedDay = currentValue ? date.day : null;
+      let pickerMode = 'day';
+
+      const triggerBtn = document.createElement('div');
+      triggerBtn.className = 'date-picker-trigger';
+      triggerBtn.style.cssText = 'min-width: 130px; color: ' + (currentValue ? '#333' : '#999') + ';';
+      triggerBtn.textContent = currentValue || '选择对比日期';
+
+      const container = document.createElement('div');
+      container.className = 'date-picker-container';
+      container.style.minWidth = '252px';
+
+      const hidePicker = () => container.classList.remove('show');
+      const showPicker = () => { pickerMode = 'day'; container.classList.add('show'); renderPicker(); };
+
+      triggerBtn.onclick = () => container.classList.contains('show') ? hidePicker() : showPicker();
+
+      document.addEventListener('click', (e) => {
+        if (!item.contains(e.target)) hidePicker();
+      });
+
+      const renderPicker = () => {
+        container.innerHTML = '';
+        renderPickerHeader();
+        if (pickerMode === 'day') renderDayGrid();
+        else if (pickerMode === 'year') renderYearGrid();
+        else if (pickerMode === 'month') renderMonthGrid();
+      };
+
+      const renderPickerHeader = () => {
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;gap:12px;';
+
+        const makeArrow = (text, onClick) => {
+          const btn = document.createElement('button');
+          btn.textContent = text;
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;color:#555;font-size:13px;padding:2px 5px;line-height:1;';
+          btn.onclick = (e) => { e.stopPropagation(); onClick(); };
+          return btn;
+        };
+
+        const yearSection = document.createElement('div');
+        yearSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const yearLabel = document.createElement('span');
+        yearLabel.textContent = selectedYear + '年';
+        yearLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        yearLabel.onmouseover = () => yearLabel.style.background = '#e8f5e9';
+        yearLabel.onmouseout = () => yearLabel.style.background = '';
+        yearLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'year' ? 'day' : 'year'; renderPicker(); };
+        yearSection.appendChild(makeArrow('◀', () => { selectedYear--; renderPicker(); }));
+        yearSection.appendChild(yearLabel);
+        yearSection.appendChild(makeArrow('▶', () => { selectedYear++; renderPicker(); }));
+
+        const monthSection = document.createElement('div');
+        monthSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const monthLabel = document.createElement('span');
+        monthLabel.textContent = selectedMonth + '月';
+        monthLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        monthLabel.onmouseover = () => monthLabel.style.background = '#e8f5e9';
+        monthLabel.onmouseout = () => monthLabel.style.background = '';
+        monthLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'month' ? 'day' : 'month'; renderPicker(); };
+        monthSection.appendChild(makeArrow('◀', () => {
+          selectedMonth--; if (selectedMonth < 1) { selectedMonth = 12; selectedYear--; } renderPicker();
+        }));
+        monthSection.appendChild(monthLabel);
+        monthSection.appendChild(makeArrow('▶', () => {
+          selectedMonth++; if (selectedMonth > 12) { selectedMonth = 1; selectedYear++; } renderPicker();
+        }));
+
+        const rightSection = document.createElement('div');
+        rightSection.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        rightSection.appendChild(yearSection);
+        rightSection.appendChild(monthSection);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = '清除';
+        clearBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#e74c3c;font-size:12px;padding:2px 4px;';
+        clearBtn.onclick = (e) => { e.stopPropagation(); selectedDay = null; onClear(); hidePicker(); };
+
+        header.appendChild(rightSection);
+        header.appendChild(clearBtn);
+        container.appendChild(header);
+      };
+
+      const renderDayGrid = () => {
+        const weekRow = document.createElement('div');
+        weekRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:8px 8px 2px;';
+        ['日', '一', '二', '三', '四', '五', '六'].forEach(d => {
+          const cell = document.createElement('div');
+          cell.textContent = d;
+          cell.style.cssText = 'text-align:center;font-size:11px;color:#888;font-weight:600;padding:2px 0;';
+          weekRow.appendChild(cell);
+        });
+        container.appendChild(weekRow);
+
+        const dayGrid = document.createElement('div');
+        dayGrid.className = 'date-picker-grid';
+        dayGrid.style.cssText = 'padding:0 8px 8px;';
+        const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
+        const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+        for (let i = 0; i < firstDay; i++) {
+          const empty = document.createElement('div');
+          empty.className = 'date-picker-cell empty';
+          dayGrid.appendChild(empty);
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+          const btn = document.createElement('div');
+          btn.className = 'date-picker-cell';
+          btn.textContent = d;
+          if (d === selectedDay) btn.classList.add('selected');
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            selectedDay = d;
+            const newDate = formatDate(selectedYear, selectedMonth, selectedDay);
+            triggerBtn.textContent = newDate;
+            triggerBtn.style.color = '#333';
+            onDateSelect(newDate);
+            hidePicker();
+          };
+          dayGrid.appendChild(btn);
+        }
+        container.appendChild(dayGrid);
+      };
+
+      const renderYearGrid = () => {
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:10px;';
+        const startYear = selectedYear - 6;
+        for (let y = startYear; y < startYear + 12; y++) {
+          const btn = document.createElement('button');
+          btn.textContent = y;
+          btn.style.cssText = 'padding:8px 4px;border:1px solid #ddd;background:white;cursor:pointer;border-radius:4px;font-size:13px;';
+          if (y === selectedYear) { btn.style.background = '#28a745'; btn.style.color = 'white'; btn.style.borderColor = '#28a745'; }
+          btn.onclick = (e) => { e.stopPropagation(); selectedYear = y; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      const renderMonthGrid = () => {
+        const grid = document.createElement('div');
+        grid.className = 'date-picker-month-grid';
+        grid.style.padding = '10px';
+        for (let m = 1; m <= 12; m++) {
+          const btn = document.createElement('button');
+          btn.className = 'date-picker-month-btn';
+          btn.textContent = m + '月';
+          if (m === selectedMonth) btn.classList.add('selected');
+          btn.onclick = (e) => { e.stopPropagation(); selectedMonth = m; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      item.appendChild(triggerBtn);
+      item.appendChild(container);
+      return item;
+    }
+
+    function createDateRangePickerItem(startVal, endVal, onChange) {
+      const item = document.createElement('div');
+      item.className = 'filter-item';
+      const label = document.createElement('label');
+      label.textContent = '日期';
+      item.appendChild(label);
+
+      let selStart = startVal || '';
+      let selEnd = endVal || '';
+      let pickingEnd = !!selStart;
+
+      const initDate = parseDateString(selStart || '');
+      let viewYear = initDate.year;
+      let viewMonth = initDate.month;
+      let pickerMode = 'day';
+
+      const trigger = document.createElement('div');
+      trigger.className = 'date-picker-trigger';
+
+      const updateTrigger = () => {
+        if (selStart && selEnd) {
+          trigger.textContent = selStart + ' ～ ' + selEnd;
+          trigger.style.color = '#333';
+        } else if (selStart) {
+          trigger.textContent = selStart + ' ～ 请选结束日期';
+          trigger.style.color = '#666';
+        } else {
+          trigger.textContent = '选择日期范围';
+          trigger.style.color = '#999';
+        }
+      };
+      updateTrigger();
+
+      const container = document.createElement('div');
+      container.className = 'date-picker-container';
+      container.style.minWidth = '252px';
+
+      const hidePicker = () => container.classList.remove('show');
+      const showPicker = () => { pickerMode = 'day'; container.classList.add('show'); renderPicker(); };
+      trigger.onclick = () => container.classList.contains('show') ? hidePicker() : showPicker();
+      document.addEventListener('click', (e) => { if (!item.contains(e.target)) hidePicker(); });
+
+      const renderPicker = () => {
+        container.innerHTML = '';
+        const hint = document.createElement('div');
+        hint.style.cssText = 'padding:5px 12px;font-size:12px;color:#888;background:#f9f9f9;border-bottom:1px solid #eee;';
+        hint.textContent = pickingEnd ? `开始：${selStart}，请点击选择结束日期` : '请点击选择开始日期';
+        container.appendChild(hint);
+        renderRangeHeader();
+        if (pickerMode === 'day') renderRangeDayGrid();
+        else if (pickerMode === 'year') renderRangeYearGrid();
+        else if (pickerMode === 'month') renderRangeMonthGrid();
+      };
+
+      const renderRangeHeader = () => {
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;gap:12px;';
+        const makeArrow = (text, onClick) => {
+          const btn = document.createElement('button');
+          btn.textContent = text;
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;color:#555;font-size:13px;padding:2px 5px;';
+          btn.onclick = (e) => { e.stopPropagation(); onClick(); };
+          return btn;
+        };
+        const yearSection = document.createElement('div');
+        yearSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const yearLabel = document.createElement('span');
+        yearLabel.textContent = viewYear + '年';
+        yearLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        yearLabel.onmouseover = () => yearLabel.style.background = '#e8f5e9';
+        yearLabel.onmouseout = () => yearLabel.style.background = '';
+        yearLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'year' ? 'day' : 'year'; renderPicker(); };
+        yearSection.appendChild(makeArrow('◀', () => { viewYear--; renderPicker(); }));
+        yearSection.appendChild(yearLabel);
+        yearSection.appendChild(makeArrow('▶', () => { viewYear++; renderPicker(); }));
+
+        const monthSection = document.createElement('div');
+        monthSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const monthLabel = document.createElement('span');
+        monthLabel.textContent = viewMonth + '月';
+        monthLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        monthLabel.onmouseover = () => monthLabel.style.background = '#e8f5e9';
+        monthLabel.onmouseout = () => monthLabel.style.background = '';
+        monthLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'month' ? 'day' : 'month'; renderPicker(); };
+        monthSection.appendChild(makeArrow('◀', () => { viewMonth--; if (viewMonth < 1) { viewMonth = 12; viewYear--; } renderPicker(); }));
+        monthSection.appendChild(monthLabel);
+        monthSection.appendChild(makeArrow('▶', () => { viewMonth++; if (viewMonth > 12) { viewMonth = 1; viewYear++; } renderPicker(); }));
+
+        const sections = document.createElement('div');
+        sections.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        sections.appendChild(yearSection);
+        sections.appendChild(monthSection);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = '清除';
+        clearBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#e74c3c;font-size:12px;';
+        clearBtn.onclick = (e) => { e.stopPropagation(); selStart = ''; selEnd = ''; pickingEnd = false; updateTrigger(); onChange('', ''); hidePicker(); };
+
+        header.appendChild(sections);
+        header.appendChild(clearBtn);
+        container.appendChild(header);
+      };
+
+      const renderRangeDayGrid = () => {
+        const weekRow = document.createElement('div');
+        weekRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:8px 8px 2px;';
+        ['日','一','二','三','四','五','六'].forEach(d => {
+          const cell = document.createElement('div');
+          cell.textContent = d;
+          cell.style.cssText = 'text-align:center;font-size:11px;color:#888;font-weight:600;padding:2px 0;';
+          weekRow.appendChild(cell);
+        });
+        container.appendChild(weekRow);
+        const dayGrid = document.createElement('div');
+        dayGrid.className = 'date-picker-grid';
+        dayGrid.style.cssText = 'padding:0 8px 8px;';
+        const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay();
+        const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+        for (let i = 0; i < firstDay; i++) {
+          const empty = document.createElement('div');
+          empty.className = 'date-picker-cell empty';
+          dayGrid.appendChild(empty);
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = formatDate(viewYear, viewMonth, d);
+          const btn = document.createElement('div');
+          btn.className = 'date-picker-cell';
+          btn.textContent = d;
+          const isStart = dateStr === selStart;
+          const isEnd = dateStr === selEnd;
+          const inRange = selStart && selEnd && dateStr > selStart && dateStr < selEnd;
+          if (isStart || isEnd) btn.classList.add('selected');
+          else if (inRange) { btn.style.background = '#d4edda'; btn.style.borderColor = '#a8d8b9'; }
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (!pickingEnd) {
+              selStart = dateStr; selEnd = ''; pickingEnd = true;
+            } else {
+              if (dateStr >= selStart) { selEnd = dateStr; }
+              else { selEnd = selStart; selStart = dateStr; }
+              pickingEnd = false;
+              updateTrigger();
+              onChange(selStart, selEnd);
+              hidePicker();
+              return;
+            }
+            updateTrigger();
+            renderPicker();
+          };
+          dayGrid.appendChild(btn);
+        }
+        container.appendChild(dayGrid);
+      };
+
+      const renderRangeYearGrid = () => {
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:10px;';
+        const startYear = viewYear - 6;
+        for (let y = startYear; y < startYear + 12; y++) {
+          const btn = document.createElement('button');
+          btn.textContent = y;
+          btn.style.cssText = 'padding:8px 4px;border:1px solid #ddd;background:white;cursor:pointer;border-radius:4px;font-size:13px;';
+          if (y === viewYear) { btn.style.background = '#28a745'; btn.style.color = 'white'; btn.style.borderColor = '#28a745'; }
+          btn.onclick = (e) => { e.stopPropagation(); viewYear = y; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      const renderRangeMonthGrid = () => {
+        const grid = document.createElement('div');
+        grid.className = 'date-picker-month-grid';
+        grid.style.padding = '10px';
+        for (let m = 1; m <= 12; m++) {
+          const btn = document.createElement('button');
+          btn.className = 'date-picker-month-btn';
+          btn.textContent = m + '月';
+          if (m === viewMonth) btn.classList.add('selected');
+          btn.onclick = (e) => { e.stopPropagation(); viewMonth = m; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      item.appendChild(trigger);
+      item.appendChild(container);
+      return item;
+    }
+
+    function createDatePickerItem(currentValue, onDateSelect, compact = false) {
+      const item = document.createElement('div');
+      item.className = 'filter-item';
+      if (compact) item.style.minWidth = '0';
+      const label = document.createElement('label');
+      label.textContent = '日期';
+      item.appendChild(label);
+
+      const date = parseDateString(currentValue);
+      let selectedYear = date.year;
+      let selectedMonth = date.month;
+      let selectedDay = date.day;
+      let pickerMode = 'day'; // 'day' | 'year' | 'month'
+
+      const triggerBtn = document.createElement('div');
+      triggerBtn.className = 'date-picker-trigger';
+      triggerBtn.textContent = currentValue;
+
+      const container = document.createElement('div');
+      container.className = 'date-picker-container';
+      container.style.minWidth = '252px';
+
+      const hidePicker = () => container.classList.remove('show');
+      const showPicker = () => { pickerMode = 'day'; container.classList.add('show'); renderPicker(); };
+
+      triggerBtn.onclick = () => container.classList.contains('show') ? hidePicker() : showPicker();
+
+      document.addEventListener('click', (e) => {
+        if (!item.contains(e.target)) hidePicker();
+      });
+
+      const renderPicker = () => {
+        container.innerHTML = '';
+        renderPickerHeader();
+        if (pickerMode === 'day') renderDayGrid();
+        else if (pickerMode === 'year') renderYearGrid();
+        else if (pickerMode === 'month') renderMonthGrid();
+      };
+
+      const renderPickerHeader = () => {
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;gap:12px;';
+
+        const makeArrow = (text, onClick) => {
+          const btn = document.createElement('button');
+          btn.textContent = text;
+          btn.style.cssText = 'background:none;border:none;cursor:pointer;color:#555;font-size:13px;padding:2px 5px;line-height:1;';
+          btn.onclick = (e) => { e.stopPropagation(); onClick(); };
+          return btn;
+        };
+
+        // 年份区域
+        const yearSection = document.createElement('div');
+        yearSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const yearLabel = document.createElement('span');
+        yearLabel.textContent = selectedYear + '年';
+        yearLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        yearLabel.onmouseover = () => yearLabel.style.background = '#e8f5e9';
+        yearLabel.onmouseout = () => yearLabel.style.background = '';
+        yearLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'year' ? 'day' : 'year'; renderPicker(); };
+        yearSection.appendChild(makeArrow('◀', () => { selectedYear--; renderPicker(); }));
+        yearSection.appendChild(yearLabel);
+        yearSection.appendChild(makeArrow('▶', () => { selectedYear++; renderPicker(); }));
+
+        // 月份区域
+        const monthSection = document.createElement('div');
+        monthSection.style.cssText = 'display:flex;align-items:center;gap:2px;';
+        const monthLabel = document.createElement('span');
+        monthLabel.textContent = selectedMonth + '月';
+        monthLabel.style.cssText = 'font-weight:600;cursor:pointer;padding:2px 5px;border-radius:3px;font-size:14px;';
+        monthLabel.onmouseover = () => monthLabel.style.background = '#e8f5e9';
+        monthLabel.onmouseout = () => monthLabel.style.background = '';
+        monthLabel.onclick = (e) => { e.stopPropagation(); pickerMode = pickerMode === 'month' ? 'day' : 'month'; renderPicker(); };
+        monthSection.appendChild(makeArrow('◀', () => {
+          selectedMonth--; if (selectedMonth < 1) { selectedMonth = 12; selectedYear--; } renderPicker();
+        }));
+        monthSection.appendChild(monthLabel);
+        monthSection.appendChild(makeArrow('▶', () => {
+          selectedMonth++; if (selectedMonth > 12) { selectedMonth = 1; selectedYear++; } renderPicker();
+        }));
+
+        header.appendChild(yearSection);
+        header.appendChild(monthSection);
+        container.appendChild(header);
+      };
+
+      const renderDayGrid = () => {
+        // 周标题行
+        const weekRow = document.createElement('div');
+        weekRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:8px 8px 2px;';
+        ['日', '一', '二', '三', '四', '五', '六'].forEach(d => {
+          const cell = document.createElement('div');
+          cell.textContent = d;
+          cell.style.cssText = 'text-align:center;font-size:11px;color:#888;font-weight:600;padding:2px 0;';
+          weekRow.appendChild(cell);
+        });
+        container.appendChild(weekRow);
+
+        // 日格子
+        const dayGrid = document.createElement('div');
+        dayGrid.className = 'date-picker-grid';
+        dayGrid.style.cssText = 'padding:0 8px 8px;';
+        const firstDay = new Date(selectedYear, selectedMonth - 1, 1).getDay();
+        const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+        for (let i = 0; i < firstDay; i++) {
+          const empty = document.createElement('div');
+          empty.className = 'date-picker-cell empty';
+          dayGrid.appendChild(empty);
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+          const btn = document.createElement('div');
+          btn.className = 'date-picker-cell';
+          btn.textContent = d;
+          if (d === selectedDay) btn.classList.add('selected');
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            selectedDay = d;
+            const newDate = formatDate(selectedYear, selectedMonth, selectedDay);
+            triggerBtn.textContent = newDate;
+            onDateSelect(newDate);
+            hidePicker();
+          };
+          dayGrid.appendChild(btn);
+        }
+        container.appendChild(dayGrid);
+      };
+
+      const renderYearGrid = () => {
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:10px;';
+        const startYear = selectedYear - 6;
+        for (let y = startYear; y < startYear + 12; y++) {
+          const btn = document.createElement('button');
+          btn.textContent = y;
+          btn.style.cssText = 'padding:8px 4px;border:1px solid #ddd;background:white;cursor:pointer;border-radius:4px;font-size:13px;';
+          if (y === selectedYear) { btn.style.background = '#28a745'; btn.style.color = 'white'; btn.style.borderColor = '#28a745'; }
+          btn.onclick = (e) => { e.stopPropagation(); selectedYear = y; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      const renderMonthGrid = () => {
+        const grid = document.createElement('div');
+        grid.className = 'date-picker-month-grid';
+        grid.style.padding = '10px';
+        for (let m = 1; m <= 12; m++) {
+          const btn = document.createElement('button');
+          btn.className = 'date-picker-month-btn';
+          btn.textContent = m + '月';
+          if (m === selectedMonth) btn.classList.add('selected');
+          btn.onclick = (e) => { e.stopPropagation(); selectedMonth = m; pickerMode = 'day'; renderPicker(); };
+          grid.appendChild(btn);
+        }
+        container.appendChild(grid);
+      };
+
+      item.appendChild(triggerBtn);
+      item.appendChild(container);
+      return item;
+    }
+
+    function createMultiSelectItem(field, labelText, values) {
+      const item = document.createElement('div');
+      item.className = 'filter-item';
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;display:inline-block;min-width:150px;';
+      const display = document.createElement('div');
+      display.style.cssText = 'border:1px solid #ccc;border-radius:4px;padding:6px 30px 6px 8px;background:white;cursor:pointer;min-height:20px;position:relative;';
+      const arrow = document.createElement('span');
+      arrow.textContent = '▼';
+      arrow.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);pointer-events:none;';
+      display.appendChild(arrow);
+      const dropdown = document.createElement('div');
+      dropdown.style.cssText = 'position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #ccc;border-top:none;border-radius:0 0 4px 4px;max-height:200px;overflow-y:auto;z-index:9999;display:none;';
+
+      const updateDisplay = () => {
+        const sel = currentFilters[field] ? currentFilters[field].split(',').filter(v => v) : [];
+        const txt = sel.length === 0 ? '全部' : sel.length === 1 ? sel[0] : `已选择${sel.length}项`;
+        display.childNodes[0].nodeType === 3 ? display.childNodes[0].textContent = txt : display.insertBefore(document.createTextNode(txt), arrow);
+        // replace text node
+        [...display.childNodes].forEach(n => { if (n.nodeType === 3) display.removeChild(n); });
+        display.insertBefore(document.createTextNode(txt), arrow);
+        display.style.color = sel.length === 0 ? '#666' : '#333';
+      };
+      updateDisplay();
+
+      // 全选选项
+      const allOpt = document.createElement('div');
+      allOpt.style.cssText = 'padding:8px;cursor:pointer;border-bottom:1px solid #eee;background:#f8f9fa;';
+      allOpt.textContent = '全部';
+      allOpt.onclick = () => { currentFilters[field] = ''; updateDisplay(); dropdown.style.display = 'none'; };
+      dropdown.appendChild(allOpt);
+
+      values.forEach(val => {
+        const opt = document.createElement('div');
+        opt.style.cssText = 'padding:8px;cursor:pointer;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.onclick = e => e.stopPropagation();
+        cb.onchange = () => {
+          const sel = currentFilters[field] ? currentFilters[field].split(',').filter(v => v) : [];
+          if (cb.checked) { if (!sel.includes(val)) sel.push(val); }
+          else { const i = sel.indexOf(val); if (i > -1) sel.splice(i, 1); }
+          currentFilters[field] = sel.join(',');
+          updateDisplay();
+        };
+        opt.appendChild(cb);
+        opt.appendChild(document.createTextNode(val));
+        opt.onclick = () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); };
+        dropdown.appendChild(opt);
+      });
+
+      display.onclick = () => {
+        const vis = dropdown.style.display === 'block';
+        dropdown.style.display = vis ? 'none' : 'block';
+        if (!vis) {
+          const sel = currentFilters[field] ? currentFilters[field].split(',').filter(v => v) : [];
+          dropdown.querySelectorAll('input[type=checkbox]').forEach((cb, i) => { if (i < values.length) cb.checked = sel.includes(values[i]); });
+        }
+      };
+      document.addEventListener('click', e => { if (!wrap.contains(e.target)) dropdown.style.display = 'none'; });
+
+      wrap.appendChild(display);
+      wrap.appendChild(dropdown);
+      item.appendChild(label);
+      item.appendChild(wrap);
+      return item;
+    }
+
+    function renderFilters() {
+      filterArea.innerHTML = '';
+      if (!currentReport || !Array.isArray(currentReport.dimensions)) return;
+      const dimensions = [
+        ...currentReport.dimensions.filter(d => d === '日期' || d === '时间'),
+        ...currentReport.dimensions.filter(d => d !== '日期' && d !== '时间'),
+      ];
+
+      const row = document.createElement('div');
+      row.className = 'filter-row';
+
+      dimensions.forEach(dim => {
+        const isDate = dim === '日期' || dim === '时间';
+        if (isDate) {
+          if (!currentFilters[dim]) {
+            const vals = getDistinctValues(dim).sort();
+            currentFilters[dim] = vals[0] || '';
+            currentFilters[dim + '_end'] = vals[vals.length - 1] || '';
+          }
+          const picker = createDateRangePickerItem(
+            currentFilters[dim],
+            currentFilters[dim + '_end'],
+            (start, end) => { currentFilters[dim] = start; currentFilters[dim + '_end'] = end; }
+          );
+          // 把 label 改为维度名
+          const lbl = picker.querySelector('label');
+          if (lbl) lbl.textContent = dim;
+          row.appendChild(picker);
+        } else {
+          const values = getDistinctValues(dim);
+          row.appendChild(createMultiSelectItem(dim, dim, values));
+        }
+      });
+
+      const buttonItem = document.createElement('div');
+      buttonItem.className = 'filter-item';
+      const buttonLabel = document.createElement('label');
+      buttonLabel.textContent = '操作';
+      const queryButton = document.createElement('button');
+      queryButton.className = 'filter-button';
+      queryButton.textContent = '查询';
+      queryButton.onclick = () => { renderFilters(); renderCharts(); renderTable(); };
+      buttonItem.appendChild(buttonLabel);
+      buttonItem.appendChild(queryButton);
+      row.appendChild(buttonItem);
+
+      filterArea.appendChild(row);
+    }
+
+    function formatCellValue(field, raw) {
+      if (raw == null) return '-';
+      if (typeof raw !== 'number') return String(raw);
+      if (isPercentageMetric(field)) return (raw * 100).toFixed(2) + '%';
+      if (raw % 1 !== 0) return raw.toFixed(2);
+      return raw.toLocaleString('zh-CN');
+    }
+
+    function mockComparison(metric, type) {
+      const seed = (metric + type).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      const pct = ((seed % 41) - 20) / 100;
+      const sign = pct >= 0 ? '+' : '';
+      return { pct, text: sign + (pct * 100).toFixed(1) + '%', positive: pct >= 0 };
+    }
+
+    // 将 tableColumns 展平（不含子列层级，用于非分组模式）
+    function flattenColumns(columns) {
+      const flat = [];
+      (columns || []).forEach(col => {
+        if (col.groupName) {
+          (col.columns || []).forEach(c => flat.push({ ...c, groupName: col.groupName }));
+        } else {
+          flat.push(col);
+        }
+      });
+      return flat;
+    }
+
+    // 返回数据行实际要渲染的叶子列（考虑折叠状态）
+    function getLeafColsForData(tableColumns) {
+      const leaves = [];
+      (tableColumns || []).forEach(col => {
+        if (col.groupName) {
+          col.columns.forEach(gc => {
+            if (gc.subColumns?.length && !collapsedCols.has(gc.field)) {
+              gc.subColumns.forEach(sc => leaves.push({ ...sc, isSubCol: true }));
+            } else {
+              leaves.push({ field: gc.field, label: gc.label });
+            }
+          });
+        } else {
+          leaves.push(col);
+        }
+      });
+      return leaves;
+    }
+
+    function renderTable() {
+      const columns = currentReport.layout?.tableColumns || [];
+      if (!columns.length) { tableArea.style.display = 'none'; tableArea.innerHTML = ''; return; }
+      tableArea.style.display = '';
+      tableArea.innerHTML = '';
+
+      // 首次渲染：默认折叠所有有二级列的一级列
+      if (!subColsInitialized) {
+        columns.forEach(col => {
+          if (col.groupName) col.columns.forEach(gc => { if (gc.subColumns?.length) collapsedCols.add(gc.field); });
+        });
+        subColsInitialized = true;
+      }
+
+      const tableMode = currentReport.layout?.tableMode || 'standard';
+      const comparisons = currentReport.layout?.tableComparisons || [];
+      const cmpLabels = { dow: '环比', wow: '周同比', yoy: '年同比' };
+
+      if (tableMode === 'vertical') {
+        const isOverview = currentReport.id === DETAIL_REPORT_ID;
+        const colCount = 2 + comparisons.length + (isOverview ? 1 : 0);
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        ['指标', '当前值', ...comparisons.map(c => cmpLabels[c]), ...(isOverview ? ['近7天趋势'] : [])].forEach((h, i) => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          if (h === '近7天趋势') th.style.cssText = 'min-width:100px;text-align:center;';
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow); table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        const filtered = getFilteredData();
+
+        const renderMetricRow = (col, toggleable = false, isSubRow = false) => {
+          const isCollapsed = toggleable && collapsedCols.has(col.field);
+          const tr = document.createElement('tr');
+          const nameTd = document.createElement('td');
+          if (isSubRow) {
+            nameTd.textContent = col.label || col.field;
+            nameTd.style.cssText = 'font-size:12px;padding-left:36px;color:#6b7280;text-align:right;';
+          } else if (toggleable) {
+            const icon = document.createElement('span');
+            icon.textContent = isCollapsed ? '+' : '−';
+            icon.style.cssText = 'display:inline-block;width:14px;text-align:center;font-size:13px;margin-right:4px;cursor:pointer;color:#4a5568;flex-shrink:0;';
+            icon.onclick = (e) => {
+              e.stopPropagation();
+              if (collapsedCols.has(col.field)) collapsedCols.delete(col.field);
+              else collapsedCols.add(col.field);
+              renderTable();
+            };
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = col.label || col.field;
+            nameSpan.style.cssText = 'cursor:pointer;';
+            nameTd.style.cssText = 'font-weight:500;font-size:13px;padding-left:20px;color:#4a5568;user-select:none;';
+            nameTd.appendChild(icon);
+            nameTd.appendChild(nameSpan);
+          } else {
+            nameTd.textContent = col.label || col.field;
+            nameTd.style.cssText = 'font-weight:500;font-size:13px;padding-left:20px;color:#4a5568;';
+          }
+          tr.appendChild(nameTd);
+          const vals = filtered.map(r => r[col.field]).filter(v => typeof v === 'number');
+          let current = null;
+          if (vals.length) current = isPercentageMetric(col.field) ? vals.reduce((a,b)=>a+b,0)/vals.length : vals.reduce((a,b)=>a+b,0);
+          const cellSize = isSubRow ? 'font-size:12px;text-align:right;color:#6b7280;' : 'font-size:13px;';
+          const valTd = document.createElement('td'); valTd.textContent = formatCellValue(col.field, current); valTd.style.cssText = cellSize; tr.appendChild(valTd);
+          comparisons.forEach(cType => {
+            const cmp = mockComparison(col.field, cType);
+            const td = document.createElement('td'); td.textContent = cmp.text;
+            const baseColor = cmp.positive ? '#27ae60' : '#e74c3c';
+            td.style.cssText = (isSubRow ? 'font-size:12px;text-align:right;' : 'font-size:13px;') + 'font-weight:500;color:' + baseColor + ';';
+            tr.appendChild(td);
+          });
+          // 经营大盘看板：点击行显示明细
+          if (currentReport.id === DETAIL_REPORT_ID && !isSubRow) {
+            tr.classList.add('metric-row-clickable');
+            tr.onclick = () => showMetricDetailPanel(col.field, col.label || col.field);
+          }
+          // 经营大盘看板：近7天趋势列
+          if (currentReport.id === DETAIL_REPORT_ID && !isSubRow) {
+            tr.appendChild(createSparklineCell(col.field, col.label || col.field));
+          } else if (currentReport.id === DETAIL_REPORT_ID && isSubRow) {
+            const emptyTd = document.createElement('td'); tr.appendChild(emptyTd);
+          }
+          tbody.appendChild(tr);
+          // 展开时渲染二级列
+          if (toggleable && !isCollapsed && col.subColumns?.length) {
+            col.subColumns.forEach(sc => renderMetricRow(sc, false, true));
+          }
+        };
+
+        columns.forEach(col => {
+          if (col.groupName) {
+            const groupTr = document.createElement('tr');
+            const groupTd = document.createElement('td'); groupTd.colSpan = colCount;
+            groupTd.textContent = col.groupName;
+            groupTd.style.cssText = 'font-size:16px;font-weight:700;color:#1b441d;background:#e8f5e9;padding:10px 14px;letter-spacing:0.5px;';
+            groupTr.appendChild(groupTd); tbody.appendChild(groupTr);
+            col.columns.forEach(gc => {
+              renderMetricRow(gc, gc.subColumns?.length > 0);
+            });
+          } else {
+            renderMetricRow(col);
+          }
+        });
+
+        table.appendChild(tbody); tableArea.appendChild(table);
+      } else {
+        const hasGroups = columns.some(c => c.groupName);
+        const hasSubCols = columns.some(c => c.groupName && c.columns.some(gc => gc.subColumns?.length > 0));
+        const numHeaderRows = hasGroups ? (hasSubCols ? 3 : 2) : 1;
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+
+        if (!hasGroups) {
+          const headRow = document.createElement('tr');
+          flattenColumns(columns).forEach(col => {
+            const th = document.createElement('th'); th.textContent = col.label || col.field; headRow.appendChild(th);
+          });
+          thead.appendChild(headRow);
+        } else {
+          const row1 = document.createElement('tr');
+          columns.forEach(col => {
+            const th = document.createElement('th');
+            if (col.groupName) {
+              const colspan = col.columns.reduce((s, gc) => s + (gc.subColumns?.length && !collapsedCols.has(gc.field) ? gc.subColumns.length : 1), 0);
+              th.textContent = col.groupName; th.colSpan = Math.max(colspan, 1);
+              th.style.cssText = 'text-align:center;font-size:15px;font-weight:700;border-bottom:1px solid rgba(255,255,255,0.4);';
+            } else {
+              th.textContent = col.label || col.field; th.rowSpan = numHeaderRows;
+              th.style.cssText = 'vertical-align:middle;';
+            }
+            row1.appendChild(th);
+          });
+          thead.appendChild(row1);
+
+          const row2 = document.createElement('tr');
+          columns.forEach(col => {
+            if (!col.groupName) return;
+            col.columns.forEach(gc => {
+              const th = document.createElement('th');
+              const hasSub = gc.subColumns?.length > 0;
+              const isCollapsed = collapsedCols.has(gc.field);
+              if (hasSub && !isCollapsed) {
+                th.colSpan = gc.subColumns.length;
+                th.style.cssText = 'text-align:center;font-size:13px;font-weight:600;cursor:pointer;user-select:none;';
+                th.innerHTML = '<span style="display:inline-block;width:16px;height:16px;line-height:14px;text-align:center;border:1px solid rgba(255,255,255,0.7);border-radius:3px;font-size:13px;font-weight:700;margin-right:4px;vertical-align:middle;">−</span>' + (gc.label || gc.field);
+              } else if (hasSub && isCollapsed) {
+                th.colSpan = 1; if (hasSubCols) th.rowSpan = 2;
+                th.style.cssText = 'font-size:13px;font-weight:600;cursor:pointer;user-select:none;';
+                th.innerHTML = '<span style="display:inline-block;width:16px;height:16px;line-height:14px;text-align:center;border:1px solid rgba(255,255,255,0.7);border-radius:3px;font-size:13px;font-weight:700;margin-right:4px;vertical-align:middle;">+</span>' + (gc.label || gc.field);
+              } else {
+                th.colSpan = 1; if (hasSubCols) th.rowSpan = 2;
+                th.style.cssText = 'font-size:13px;font-weight:400;opacity:0.9;';
+                th.textContent = gc.label || gc.field;
+              }
+              if (hasSub) {
+                th.onclick = () => { if (collapsedCols.has(gc.field)) collapsedCols.delete(gc.field); else collapsedCols.add(gc.field); renderTable(); };
+              }
+              row2.appendChild(th);
+            });
+          });
+          thead.appendChild(row2);
+
+          if (hasSubCols) {
+            const row3 = document.createElement('tr'); let hasCells = false;
+            columns.forEach(col => {
+              if (!col.groupName) return;
+              col.columns.forEach(gc => {
+                if (gc.subColumns?.length && !collapsedCols.has(gc.field)) {
+                  gc.subColumns.forEach(sc => {
+                    const th = document.createElement('th'); th.textContent = sc.label || sc.field;
+                    th.style.cssText = 'font-size:11px;font-weight:400;opacity:0.85;text-align:right;';
+                    row3.appendChild(th); hasCells = true;
+                  });
+                }
+              });
+            });
+            if (hasCells) thead.appendChild(row3);
+          }
+        }
+
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        const leafCols = getLeafColsForData(columns);
+        getFilteredData().forEach(row => {
+          const tr = document.createElement('tr');
+          leafCols.forEach(col => {
+            const td = document.createElement('td'); td.textContent = formatCellValue(col.field, row[col.field] ?? null); if (col.isSubCol) td.style.cssText = 'font-size:12px;text-align:right;color:#4a5568;'; tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody); tableArea.appendChild(table);
+      }
+    }
+
+    // ── 近7天趋势迷你折线图 ──────────────────────────────────
+    const sparkTooltip = document.getElementById('sparkTooltip');
+
+    // 获取指定 field 近7天每日数据（基于 reportData 中所有日期最近7天）
+    function getLast7DaysData(field) {
+      const filtered = getFilteredData();
+      // 收集所有日期并排序
+      const allDates = Array.from(new Set(reportData.map(r => r['日期']).filter(Boolean))).sort();
+      const last7 = allDates.slice(-7);
+      return last7.map(date => {
+        const dayRows = filtered.filter(r => r['日期'] === date);
+        const vals = dayRows.map(r => r[field]).filter(v => typeof v === 'number');
+        if (!vals.length) return { date, value: null };
+        const value = isPercentageMetric(field)
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : vals.reduce((a, b) => a + b, 0);
+        return { date, value };
+      });
+    }
+
+    // 如果 reportData 没有足够日期，用伪造近7天数据（demo 用）
+    function getMock7DaysData(field) {
+      const base = calculateMetricValue(field);
+      const today = new Date('2026-05-04');
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today);
+        d.setDate(today.getDate() - (6 - i));
+        const date = d.toISOString().slice(0, 10);
+        const seed = (field + date).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        const noise = ((seed * 1234567) % 100 - 50) / 100 * 0.25;
+        const value = Math.max(0, base * (1 + noise));
+        return { date, value: isPercentageMetric(field) ? Number(value.toFixed(4)) : Math.round(value) };
+      });
+    }
+
+    function getSparkData(field) {
+      const real = getLast7DaysData(field);
+      const hasReal = real.some(d => d.value !== null);
+      return hasReal ? real : getMock7DaysData(field);
+    }
+
+    function buildSparklineSVG(data, field) {
+      const w = 80, h = 28, pad = 3;
+      const values = data.map(d => d.value ?? 0);
+      const minV = Math.min(...values);
+      const maxV = Math.max(...values);
+      const range = maxV - minV || 1;
+
+      const toX = i => pad + (i / (data.length - 1)) * (w - pad * 2);
+      const toY = v => h - pad - ((v - minV) / range) * (h - pad * 2);
+
+      const points = data.map((d, i) => `${toX(i).toFixed(1)},${toY(d.value ?? minV).toFixed(1)}`);
+      const polyline = points.join(' ');
+
+      // 趋势颜色：最后一点比第一点高则绿，否则红
+      const trend = values[values.length - 1] >= values[0];
+      const color = trend ? '#27ae60' : '#e74c3c';
+      const fillColor = trend ? 'rgba(39,174,96,0.08)' : 'rgba(231,76,60,0.08)';
+
+      // 填充区域
+      const fillPath = `M${toX(0).toFixed(1)},${h - pad} ` +
+        points.map((p, i) => (i === 0 ? `L${p}` : `L${p}`)).join(' ') +
+        ` L${toX(data.length - 1).toFixed(1)},${h - pad} Z`;
+
+      const circles = data.map((d, i) =>
+        `<circle class="sp-dot" cx="${toX(i).toFixed(1)}" cy="${toY(d.value ?? minV).toFixed(1)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1.2" opacity="0" data-idx="${i}"/>`
+      ).join('');
+
+      return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+  <path d="${fillPath}" fill="${fillColor}" stroke="none"/>
+  <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  ${circles}
+</svg>`;
+    }
+
+    function createSparklineCell(field, label) {
+      const td = document.createElement('td');
+      td.style.cssText = 'text-align:center;padding:6px 10px;';
+
+      const data = getSparkData(field);
+      const wrap = document.createElement('div');
+      wrap.className = 'sparkline-wrap';
+      wrap.innerHTML = buildSparklineSVG(data, field);
+
+      // hover：高亮圆点 + tooltip
+      const svg = wrap.querySelector('svg');
+      const dots = svg.querySelectorAll('.sp-dot');
+      dots.forEach((dot, i) => {
+        dot.addEventListener('mouseenter', e => {
+          dot.setAttribute('opacity', '1');
+          const d = data[i];
+          const fmt = d.value === null ? '—' : formatCellValue(field, d.value);
+          sparkTooltip.innerHTML = `<span style="color:#aaa">${d.date}</span><br/><b>${fmt}</b>`;
+          sparkTooltip.style.display = 'block';
+          positionTooltip(e);
+        });
+        dot.addEventListener('mousemove', positionTooltip);
+        dot.addEventListener('mouseleave', () => {
+          dot.setAttribute('opacity', '0');
+          sparkTooltip.style.display = 'none';
+        });
+      });
+
+      // 点击放大
+      wrap.addEventListener('click', e => {
+        e.stopPropagation();
+        openSparkModal(field, label, data);
+      });
+
+      td.appendChild(wrap);
+      return td;
+    }
+
+    function positionTooltip(e) {
+      const x = e.clientX + 12, y = e.clientY - 36;
+      sparkTooltip.style.left = x + 'px';
+      sparkTooltip.style.top = y + 'px';
+    }
+
+    // 放大弹窗
+    let smChartInstance = null;
+    const sparkModal = document.getElementById('sparkModal');
+    document.getElementById('smClose').onclick = () => sparkModal.classList.remove('open');
+    sparkModal.addEventListener('click', e => { if (e.target === sparkModal) sparkModal.classList.remove('open'); });
+
+    function openSparkModal(field, label, data) {
+      document.getElementById('smTitle').textContent = label + ' · 近7天趋势';
+      sparkModal.classList.add('open');
+      if (smChartInstance) smChartInstance.dispose();
+      const container = document.getElementById('smChart');
+      smChartInstance = echarts.init(container);
+      const isPct = isPercentageMetric(field);
+      smChartInstance.setOption({
+        tooltip: {
+          trigger: 'axis',
+          formatter: params => {
+            const p = params[0];
+            return `${p.name}<br/><b>${formatCellValue(field, isPct ? p.value : p.value)}</b>`;
+          }
+        },
+        xAxis: { type: 'category', data: data.map(d => d.date), axisLabel: { fontSize: 12 } },
+        yAxis: {
+          type: 'value',
+          axisLabel: { formatter: v => isPct ? (v * 100).toFixed(1) + '%' : v.toLocaleString('zh-CN') }
+        },
+        series: [{
+          type: 'line',
+          data: data.map(d => d.value ?? null),
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 7,
+          lineStyle: { width: 2.5, color: '#28a745' },
+          itemStyle: { color: '#28a745' },
+          areaStyle: { color: 'rgba(40,167,69,0.08)' }
+        }],
+        grid: { left: 16, right: 16, top: 20, bottom: 28, containLabel: true }
+      });
+    }
+    // ──────────────────────────────────────────────────────────
+    const DETAIL_REPORT_ID = 'daily_business_overview';
+    const DETAIL_BIZ_LINES = ['直营','加盟','外发'];
+    const DETAIL_SVC_TYPES = ['自营运力','三方运力（外发）'];
+    const DETAIL_CUST_TYPES = ['B','C','KA直客','KA渠道','KA外发'];
+
+    function aggMetric(rows, field) {
+      const vals = rows.map(r => r[field]).filter(v => typeof v === 'number');
+      if (!vals.length) return null;
+      return isPercentageMetric(field) ? vals.reduce((a,b)=>a+b,0)/vals.length : vals.reduce((a,b)=>a+b,0);
+    }
+
+    function showMetricDetailPanel(field, label) {
+      const panel = document.getElementById('detailPanel');
+      document.getElementById('detailPanelTitle').textContent = label + ' · 明细';
+      const body = document.getElementById('detailPanelBody');
+      body.innerHTML = '';
+
+      // 基础过滤（排除 业务线/客户类型/服务类型，保留日期/城市等）
+      const excluded = new Set(['业务线','客户类型','服务类型']);
+      const baseRows = reportData.filter(row =>
+        Object.entries(currentFilters).every(([f, v]) => {
+          if (!v || excluded.has(f) || f.endsWith('_end')) return true;
+          const dateField = getDateField();
+          if (f === dateField && currentFilters[f + '_end'])
+            return row[f] >= v && row[f] <= currentFilters[f + '_end'];
+          if (v.includes(',')) return v.split(',').filter(x=>x).includes(row[f]);
+          return row[f] === v;
+        })
+      );
+
+      // 决定要展示哪些业务线/服务类型/客户类型
+      const activeBl  = currentFilters['业务线']   ? currentFilters['业务线'].split(',').filter(v=>v)   : DETAIL_BIZ_LINES;
+      const activeSvc = currentFilters['服务类型']  ? currentFilters['服务类型'].split(',').filter(v=>v)  : DETAIL_SVC_TYPES;
+      const activeCt  = currentFilters['客户类型']  ? currentFilters['客户类型'].split(',').filter(v=>v)  : DETAIL_CUST_TYPES;
+
+      const table = document.createElement('table');
+      // 表头行1：客户类型 + 各业务线（合并服务类型列）+ 合计
+      const tr1 = document.createElement('tr');
+      const thCt = document.createElement('th');
+      thCt.textContent = '客户类型'; thCt.rowSpan = 2; thCt.className = 'dim-col';
+      tr1.appendChild(thCt);
+      activeBl.forEach(bl => {
+        const th = document.createElement('th');
+        th.textContent = bl; th.colSpan = activeSvc.length + 1;
+        tr1.appendChild(th);
+      });
+      const thTotal = document.createElement('th');
+      thTotal.textContent = '合计'; thTotal.rowSpan = 2;
+      tr1.appendChild(thTotal);
+
+      // 表头行2：每个业务线下的服务类型 + 汇总
+      const tr2 = document.createElement('tr');
+      activeBl.forEach(() => {
+        activeSvc.forEach(st => { const th = document.createElement('th'); th.textContent = st; tr2.appendChild(th); });
+        const th = document.createElement('th'); th.textContent = '汇总'; tr2.appendChild(th);
+      });
+
+      const thead = document.createElement('thead');
+      thead.appendChild(tr1); thead.appendChild(tr2);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      const fmt = v => formatCellValue(field, v);
+
+      const makeRow = (ctRows, ctLabel, isTotal) => {
+        const tr = document.createElement('tr');
+        if (isTotal) tr.className = 'total-row';
+        const tdCt = document.createElement('td'); tdCt.textContent = ctLabel; tdCt.className = 'dim-cell'; tr.appendChild(tdCt);
+        let rowTotal = null;
+        activeBl.forEach(bl => {
+          const blRows = ctRows.filter(r => r['业务线'] === bl);
+          activeSvc.forEach(st => {
+            const v = aggMetric(blRows.filter(r => r['服务类型'] === st), field);
+            const td = document.createElement('td'); td.textContent = v !== null ? fmt(v) : '—'; tr.appendChild(td);
+          });
+          const blV = aggMetric(blRows, field);
+          const tdBl = document.createElement('td'); tdBl.textContent = blV !== null ? fmt(blV) : '—'; tr.appendChild(tdBl);
+          if (blV !== null) rowTotal = (rowTotal || 0) + (isPercentageMetric(field) ? blV : blV);
+        });
+        const tdTot = document.createElement('td');
+        tdTot.textContent = rowTotal !== null ? fmt(isPercentageMetric(field) ? rowTotal/activeBl.length : rowTotal) : '—';
+        tr.appendChild(tdTot);
+        tbody.appendChild(tr);
+      };
+
+      activeCt.forEach(ct => makeRow(baseRows.filter(r => r['客户类型'] === ct), ct, false));
+      makeRow(baseRows, '合计', true);
+
+      table.appendChild(tbody);
+      body.appendChild(table);
+      panel.classList.add('open');
+    }
+
+    function closeDetailPanel() {
+      document.getElementById('detailPanel').classList.remove('open');
+    }
+    // ──────────────────────────────────────────────────────
+
+    loadConfig().catch(err => {
+      reportTitle.textContent = '加载失败：' + err.message;
+    });
+  </script>
+</body>
+</html>
